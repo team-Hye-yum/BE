@@ -73,24 +73,6 @@ jobs:
 
             docker compose build
 
-      - name: Stop legacy application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            set -e
-
-            APP_DIR="$HOME/be"
-            cd "$APP_DIR"
-
-            PID=$(pgrep -f 'hyeyum.*\.jar' || true)
-            if [ -n "$PID" ]; then
-              kill -15 $PID
-              sleep 5
-            fi
-
       - name: Deploy containers
         uses: appleboy/ssh-action@v1.0.3
         with:
