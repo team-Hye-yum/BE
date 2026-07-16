@@ -1,3 +1,14 @@
 spring:
   application:
     name: hyeyum
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hyeyum}
+    username: ${SPRING_DATASOURCE_USERNAME:hyeyum}
+    password: ${SPRING_DATASOURCE_PASSWORD:hyeyum}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect

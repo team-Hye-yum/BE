@@ -1,0 +1,38 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hyeyum-be
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hyeyum}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hyeyum}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-hyeyum}
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: hyeyum-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hyeyum}
+      POSTGRES_USER: ${POSTGRES_USER:-hyeyum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyeyum}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hyeyum} -d ${POSTGRES_DB:-hyeyum}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
