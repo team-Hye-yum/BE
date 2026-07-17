@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Entity
@@ -30,18 +31,23 @@ public class CompanyBusinessPurpose {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Comment("시퀀스//이건 자동으로 채번되는 것")
     @Column(name = "business_purpose_id", nullable = false)
     private Long businessPurposeId;
 
+    @Comment("기업일련번호//예시) 117")
     @Column(name = "company_id")
     private Integer companyId;
 
+    @Comment("순서//예시) 1")
     @Column(name = "display_order")
     private Integer displayOrder;
 
+    @Comment("사업목적항목내용//예시) 1. 환경엔지니어링")
     @Column(name = "business_purpose", length = 1000)
     private String businessPurpose;
 
+    @Comment("등기일자//예시) 20100202")
     @Column(name = "registered_date")
     private LocalDate registeredDate;
 

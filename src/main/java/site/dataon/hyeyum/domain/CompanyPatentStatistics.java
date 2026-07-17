@@ -14,6 +14,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Entity
@@ -29,18 +30,23 @@ public class CompanyPatentStatistics {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Comment("시퀀스//이건 자동으로 채번되는 것")
     @Column(name = "patent_statistics_id", nullable = false)
     private Long patentStatisticsId;
 
+    @Comment("기업일련번호//예시) 117")
     @Column(name = "company_id")
     private Integer companyId;
 
+    @Comment("연도//예시) 2022")
     @Column(name = "year")
     private Integer year;
 
+    @Comment("특허등록건수//예시) 3")
     @Column(name = "registered_patent_count")
     private Integer registeredPatentCount;
 
+    @Comment("특허출원건수//예시) 1")
     @Column(name = "patent_application_count")
     private Integer patentApplicationCount;
 

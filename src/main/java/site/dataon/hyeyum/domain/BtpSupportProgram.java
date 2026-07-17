@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Comment;
 
 @Getter
 @Entity
@@ -25,39 +26,51 @@ public class BtpSupportProgram {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Comment("시퀀스//지원사업 내부 식별자")
     @Column(name = "support_program_id", nullable = false)
     private Long supportProgramId;
 
+    @Comment("예시) A1_301")
     @Column(name = "code", nullable = false, length = 20)
     private String code;
 
+    @Comment("연도// 3개의 시트를 합칠 생각 (예시) 2022")
     @Column(name = "program_year")
     private Integer programYear;
 
+    @Comment("부산TP 예산서의 사업명//예시) 비대면솔루션지원사업")
     @Column(name = "budget_program_name", length = 1000)
     private String budgetProgramName;
 
+    @Comment("사업구분//예시) 기업지원")
     @Column(name = "program_category", length = 20)
     private String programCategory;
 
+    @Comment("사업유형//예시) 패키지지원")
     @Column(name = "support_type", length = 20)
     private String supportType;
 
+    @Comment("시작일//예시) 2022-01-01")
     @Column(name = "start_date")
     private LocalDate startDate;
 
+    @Comment("종료일//예시) 2022-01-02")
     @Column(name = "end_date")
     private LocalDate endDate;
 
+    @Comment("부처명//예시) 산업부")
     @Column(name = "department_name", length = 20)
     private String departmentName;
 
+    @Comment("지자체//예시) 부산시")
     @Column(name = "local_government_name", length = 20)
     private String localGovernmentName;
 
+    @Comment("주요내용//예시) 경제 활성화")
     @Column(name = "program_summary", length = 1000)
     private String programSummary;
 
+    @Comment("기업 마당 공고문 정보//PDF 링크들을 담을 예정")
     @Column(name = "announcement_url", length = 20)
     private String announcementUrl;
 }
