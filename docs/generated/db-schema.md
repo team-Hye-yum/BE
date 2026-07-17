@@ -302,6 +302,12 @@ btp_support_program 1 ── N btp_support_history
 - 연도별 테이블은 `(company_id, year)` 조회 인덱스를 둔다.
 - 지원 이력은 `(company_id, support_year)`, `(code)`, `(selected_date)` 조회 인덱스를 검토한다.
 - NTIS 과제는 `(company_id, reference_year)` 조회 인덱스를 둔다.
+- 복합 유니크 제약:
+  - `company_business_purpose(company_id, display_order)`
+  - `company_employment_statistics(company_id, year)`
+  - `company_financial_statistics(company_id, year)`
+  - `company_patent_statistics(company_id, year)`
+  - `btp_support_history(support_year, code)`
 - 원천 DDL의 불명확 필드(`Field`, `employee_counteld3`)는 DB 호환을 위해 보존하되 도메인 DTO에서 의미 있는 이름으로 감싼다.
 
 ## Migration 초안 기준

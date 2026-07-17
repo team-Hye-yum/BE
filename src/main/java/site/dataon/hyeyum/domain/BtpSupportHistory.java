@@ -8,6 +8,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -21,7 +22,11 @@ import lombok.NoArgsConstructor;
             @Index(name = "idx_btp_support_history_company_year", columnList = "company_id, support_year"),
             @Index(name = "idx_btp_support_history_code", columnList = "code"),
             @Index(name = "idx_btp_support_history_selected_date", columnList = "selected_date")
-        })
+        },
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_btp_support_history_support_year_code",
+                        columnNames = {"support_year", "code"}))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BtpSupportHistory {
 

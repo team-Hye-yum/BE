@@ -8,6 +8,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,7 +17,11 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "company_employment_statistics",
-        indexes = @Index(name = "idx_company_employment_statistics_company_year", columnList = "company_id, year"))
+        indexes = @Index(name = "idx_company_employment_statistics_company_year", columnList = "company_id, year"),
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_company_employment_statistics_company_year",
+                        columnNames = {"company_id", "year"}))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyEmploymentStatistics {
 

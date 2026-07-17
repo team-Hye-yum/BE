@@ -127,6 +127,14 @@ BTP 지원 이력.code
 - `company_ntis_collaborative_project(company_id, reference_year)`
 - `company_business_purpose(company_id, display_order)`
 
+복합 유니크 기준:
+
+- `company_business_purpose(company_id, display_order)`
+- `company_employment_statistics(company_id, year)`
+- `company_financial_statistics(company_id, year)`
+- `company_patent_statistics(company_id, year)`
+- `btp_support_history(support_year, code)`
+
 ## 금지
 
 - `company` 외부에 AI 요약/추천/판단 결과 저장 테이블 추가하기

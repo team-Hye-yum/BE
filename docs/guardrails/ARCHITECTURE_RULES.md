@@ -40,6 +40,7 @@
 - `btp_support_history.code`는 `btp_support_program.code`와 연결한다.
 - 연도 통계 테이블은 `(company_id, year)` 조회 인덱스를 둔다.
 - 지원 이력은 `(company_id, support_year)`, `(code)` 인덱스를 검토한다.
+- 복합 유니크 제약은 `company_business_purpose(company_id, display_order)`, `company_employment_statistics(company_id, year)`, `company_financial_statistics(company_id, year)`, `company_patent_statistics(company_id, year)`, `btp_support_history(support_year, code)`를 따른다.
 - FK 제약을 유예하더라도 애플리케이션과 문서의 논리 관계는 유지한다.
 - 원천 오타 컬럼은 필요한 경우 DB에 보존하되 DTO에서 의미 있는 이름으로 감싼다.
 
