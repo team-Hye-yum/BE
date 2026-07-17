@@ -1,0 +1,8 @@
+Backend API design reference for LLMs
+
+- Use resource-oriented URLs.
+- Use standard HTTP status codes.
+- Keep error response shape consistent.
+- Do not expose JPA Entity structures as API responses.
+- Document pagination, sorting, enum, date, and money formats.
+- Separate user-facing messages from internal diagnostic logs.

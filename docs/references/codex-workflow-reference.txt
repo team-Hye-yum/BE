@@ -1,0 +1,14 @@
+Codex Java/Spring workflow reference
+
+1. Read AGENTS.md.
+2. For DIVE 2026 work, read docs/PROJECT_DOMAIN.md, docs/DATA_MODELING.md, docs/ANALYSIS_RULES.md, and docs/API_CONTRACT.md.
+3. For data replacement work, read docs/EXECUTION_RUNBOOK.md and docs/DATA_QUALITY_REPORT.md.
+4. Read docs/JAVA_SPRING_CODE_STYLE.md for backend work.
+5. Inspect current package structure before editing.
+6. Keep Controller thin.
+7. Put use-case orchestration in Service/Application.
+8. Put state changes and invariants in Domain.
+9. Keep Repository focused on persistence.
+10. Add or update tests at the right level.
+11. Run formatter, static analysis, and tests.
+12. Update docs when a rule or pattern changes.
