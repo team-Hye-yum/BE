@@ -27,6 +27,6 @@
 
 1. `generated/db-schema.md`에서 구현 대상 테이블과 제외 대상을 확인한다.
 2. `DATA_MODELING.md`에서 원천 파일, staging, service DB, serving 계층의 역할을 확인한다.
-3. Entity, migration, Repository를 만들 때 AI 요약/추천/판단 저장 필드가 섞이지 않았는지 확인한다.
+3. Entity, migration, Repository를 만들 때 `company`의 AI 요약 컬럼 외에 AI 추천/판단 저장 필드가 섞이지 않았는지 확인한다.
 4. API 응답을 만들 때 Entity를 직접 반환하지 않고 DTO/projection으로 공개 범위를 분리한다.
 5. 완료 전 `guardrails/QUALITY_GATES.md`와 `operations/REVIEW_LOOP.md` 기준으로 검증한다.

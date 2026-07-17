@@ -108,7 +108,7 @@ infra/query -> repository/query port 구현
 - Flyway 또는 Liquibase 같은 migration 도구를 사용한다.
 - 첫 migration은 `ai db` 제외 테이블만 만든다.
 - `VARHCAR` 같은 DDL 오타는 migration에서 `VARCHAR`로 수정한다.
-- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`, `Untitled4`는 migration에 넣지 않는다.
+- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`는 현재 ERD 기준에 따라 `company`에 포함하고, `Untitled4`는 migration에 넣지 않는다.
 - DDL에 FK가 없더라도 논리 관계는 명확히 둔다.
 - 실제 FK 제약은 초기 데이터 품질을 확인한 뒤 적용한다. 단, 애플리케이션 코드와 문서에서는 관계를 전제로 설계한다.
 - 연도 통계와 지원 이력은 조회 인덱스를 migration에 함께 둔다.
@@ -151,7 +151,7 @@ raw Excel / pasted DDL
 ## 운영 가드레일
 
 - 자동 선정, 자동 탈락, 합격확률, 선정가능성 문구를 만들지 않는다.
-- AI 요약/추천/판단 결과 저장 DB를 만들지 않는다.
+- AI 추천/판단 결과 저장용 별도 DB를 만들지 않는다.
 - 지원 이후 변화는 인과관계가 아니라 관찰 가능한 변화로만 표현한다.
 - 결측, 0, 미매칭은 서로 다른 상태로 보존한다.
 - 큰 변경은 문서, migration, 테스트를 같은 PR 단위로 묶는다.

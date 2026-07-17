@@ -85,7 +85,7 @@ private Integer employeeCount;
 - Flyway 또는 Liquibase를 사용한다.
 - migration은 코드와 같은 PR에서 관리한다.
 - 첫 migration은 `docs/generated/db-schema.md`의 구현 대상만 포함한다.
-- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`, `Untitled4`는 만들지 않는다.
+- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`는 현재 ERD 기준에 따라 `company`에 포함하고, `Untitled4`는 만들지 않는다.
 - DDL의 `VARHCAR`는 `VARCHAR`로 수정한다.
 - 초기에는 데이터 품질 때문에 FK 제약을 유예할 수 있지만, 논리 관계와 인덱스는 문서와 코드에 반영한다.
 - 금액/날짜/Boolean 변환 실패는 조용히 null 처리하지 않고 품질 리포트에 남긴다.
@@ -161,7 +161,7 @@ private Integer employeeCount;
 - 모든 예외를 HTTP 200 또는 `RuntimeException`으로 처리
 - 모든 테스트에 `@SpringBootTest`
 - Entity를 API로 직접 반환
-- AI 요약/추천/판단 컬럼을 서비스 DB에 슬쩍 추가
+- AI 추천/판단 컬럼이나 별도 AI 결과 테이블을 서비스 DB에 슬쩍 추가
 
 ## PR 체크리스트
 
@@ -175,5 +175,5 @@ private Integer employeeCount;
 - [ ] N+1 가능성을 확인했는가?
 - [ ] 오류 응답이 표준 포맷을 따르는가?
 - [ ] 로그에 추적 정보가 있고 민감정보가 없는가?
-- [ ] migration에 AI DB 제외 규칙을 어기지 않았는가?
+- [ ] migration에 `Untitled4` 제외 규칙과 별도 AI 결과 테이블 금지 규칙을 어기지 않았는가?
 - [ ] 평가위원 모드와 기업 PoC 모드의 공개 범위가 분리되어 있는가?

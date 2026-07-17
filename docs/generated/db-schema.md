@@ -1,8 +1,14 @@
 # DB Schema
 
+## Current ERD baseline
+
+- Implement the attached DDL except the temporary table `Untitled4`.
+- Include `company.industry_brief`, `company.ai_summary`, and `company.ai_one_line_summary` in the `company` table/entity.
+- Keep API responses separated from JPA entities even when AI summary columns are stored on `company`.
+
 이 문서는 Codex가 백엔드 구현을 시작할 때 우선 참조해야 하는 구현 대상 ERD입니다.
 
-첨부 DDL에서 `ai db`로 분류되는 필드/테이블은 구현 대상에서 제외합니다. 현재 DDL 기준으로는 `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`를 제외하고, 임시 테이블인 `Untitled4`도 제외합니다. 나머지 테이블은 우리가 구현할 1차 서비스 DB 모델로 취급합니다.
+첨부 DDL에서 임시 테이블인 `Untitled4`는 제외합니다. 현재 ERD 기준으로는 `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`를 `company` 테이블/Entity에 포함합니다. 나머지 테이블은 우리가 구현할 1차 서비스 DB 모델로 취급합니다.
 
 ## 공통 원칙
 
@@ -66,14 +72,10 @@
 | `company_name` | VARCHAR(20) | 기업명, API 노출 시 마스킹/권한 확인 |
 | `business_registration_number` | VARCHAR(20) | 사업자등록번호, 기본 API 노출 금지 |
 | `address` | VARCHAR(1000) | 소재지 |
+| `industry_brief` | TEXT | AI/context-generated industry brief |
+| `ai_summary` | TEXT | AI-generated company summary |
+| `ai_one_line_summary` | TEXT | AI-generated one-line company summary |
 
-제외 필드:
-
-- `industry_brief`
-- `ai_summary`
-- `ai_one_line_summary`
-
-위 세 필드는 AI 사전 생성/요약 DB 영역으로 보고 1차 구현 DB에서는 생성하지 않는다.
 
 ### `btp_support_program`
 
@@ -294,7 +296,7 @@ btp_support_program 1 ── N btp_support_history
 ## 구현 체크리스트
 
 - JPA Entity는 위 구현 대상 테이블만 만든다.
-- AI 요약/사전 생성 컬럼은 Entity, migration, API DTO에 추가하지 않는다.
+- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`는 현재 ERD 기준에 따라 `company` Entity에 포함한다.
 - Entity를 API 응답으로 직접 노출하지 않는다.
 - `company_id` 기반 조회는 scorecard, support history, 재무/고용/특허/NTIS/사업목적을 필요에 따라 projection으로 묶는다.
 - 연도별 테이블은 `(company_id, year)` 조회 인덱스를 둔다.

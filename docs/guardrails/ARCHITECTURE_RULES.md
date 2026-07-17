@@ -34,7 +34,7 @@
 
 ## DB 규칙
 
-- migration에는 `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`, `Untitled4`를 만들지 않는다.
+- migration에는 `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`를 `company`에 포함하고, `Untitled4`는 만들지 않는다.
 - `VARHCAR`는 `VARCHAR`로 수정한다.
 - `company_id`는 기업 관련 테이블의 기준 조인 키다.
 - `btp_support_history.code`는 `btp_support_program.code`와 연결한다.
@@ -56,7 +56,7 @@
 
 아래가 보이면 구현을 멈추고 문서 또는 설계를 먼저 수정한다.
 
-- AI 요약 컬럼을 Entity/migration/DTO에 추가
+- `company` 외부에 AI 요약/추천/판단 결과 저장 컬럼이나 테이블 추가
 - 원천 엑셀 헤더를 그대로 API 필드로 사용
 - `company_id`가 아닌 사업자등록번호를 기본 조인 키로 사용
 - 결측을 0으로 치환

@@ -24,9 +24,9 @@
 
 - 첨부 ERD에서 `ai db`를 제외한 테이블이 1차 구현 대상이다.
 - 구현 대상 ERD는 `docs/generated/db-schema.md`에 정리되어 있다.
-- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`는 구현하지 않는다.
+- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`는 현재 ERD 기준에 따라 `company`에 구현한다.
 - 임시 테이블 `Untitled4`는 구현하지 않는다.
-- AI 요약, AI 추천, AI 판단 결과를 저장하는 별도 DB 모델도 만들지 않는다.
+- AI 추천, AI 판단 결과를 저장하는 별도 DB 모델은 만들지 않는다.
 - DDL의 `VARHCAR`는 구현 시 `VARCHAR`로 바로잡는다.
 - `company_id`는 모든 기업 관련 데이터의 기준 조인 키다.
 - `btp_support_history.code`는 `btp_support_program.code`와 연결한다.
@@ -75,8 +75,8 @@
 
 아래가 보이면 구현을 계속하지 말고 설계나 문구를 먼저 고친다.
 
-- AI 요약/추천/판단 결과 저장 컬럼 또는 테이블 추가
-- `company.ai_summary`, `company.ai_one_line_summary`, `company.industry_brief` 구현
+- AI 추천/판단 결과 저장 컬럼 또는 테이블 추가
+- `company` 외부에 AI 요약 저장용 별도 테이블 추가
 - `Untitled4` 구현
 - 원천 컬럼을 그대로 영구 DB/API 모델로 노출
 - 결측, 0, KODATA 미매칭을 같은 값으로 처리

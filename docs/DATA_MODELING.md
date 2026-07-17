@@ -7,7 +7,7 @@
 - `company`를 중심 엔티티로 둔다.
 - `company_id`는 모든 KODATA/BTP 파생 데이터의 1차 조인 키다.
 - `btp_support_history.code`는 `btp_support_program.code`와 연결되는 사업 코드다.
-- AI 요약 저장 필드와 AI 분석 결과 저장용 테이블은 1차 구현 범위가 아니다.
+- `company`의 AI 요약 필드는 현재 ERD 기준에 따라 포함하되, AI 분석 결과 저장용 별도 테이블은 1차 구현 범위가 아니다.
 - 원천 파일의 모든 컬럼을 무조건 API/도메인 모델로 승격하지 않는다.
 - 원천 스키마에 오타가 있어도 데이터 호환이 필요한 컬럼명은 DB에 남기고 DTO에서 의미 있는 이름으로 감싼다.
 
@@ -29,9 +29,6 @@
 제외 대상:
 
 - `Untitled4`
-- `company.industry_brief`
-- `company.ai_summary`
-- `company.ai_one_line_summary`
 - 별도 AI 요약, AI 추천, AI 판단 결과 저장 테이블
 
 ## 데이터 계층
@@ -43,7 +40,7 @@
 | service DB | 첨부 ERD 기준의 구현 테이블 | `docs/generated/db-schema.md` 기준 |
 | serving | 화면/API에 맞춘 응답 모델 | Entity가 아닌 DTO/projection |
 
-staging은 원천을 보존하고 오류를 찾기 위한 계층입니다. 서비스 DB는 첨부 ERD를 기준으로 하되, AI DB 제외 원칙과 타입 오타 수정 원칙을 적용합니다.
+staging은 원천을 보존하고 오류를 찾기 위한 계층입니다. 서비스 DB는 첨부 ERD를 기준으로 하되, `Untitled4` 제외 원칙과 타입 오타 수정 원칙을 적용합니다.
 
 ## 조인 기준
 
@@ -132,7 +129,7 @@ BTP 지원 이력.code
 
 ## 금지
 
-- AI 요약 컬럼을 JPA Entity에 추가하기
+- `company` 외부에 AI 요약/추천/판단 결과 저장 테이블 추가하기
 - 원천 임시 테이블 `Untitled4` 구현하기
 - 원천 컬럼 전체를 그대로 API 응답에 노출하기
 - 결측을 0으로 치환하기

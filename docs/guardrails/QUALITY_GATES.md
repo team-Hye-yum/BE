@@ -29,7 +29,7 @@
 ## DB/Migration 게이트
 
 - migration이 `docs/generated/db-schema.md`의 구현 대상 테이블만 만드는가?
-- `company.industry_brief`, `company.ai_summary`, `company.ai_one_line_summary`, `Untitled4`가 없는가?
+- `company`의 AI 요약 컬럼은 포함하되, `Untitled4`와 별도 AI 결과 테이블이 없는가?
 - `VARHCAR`가 `VARCHAR`로 수정되었는가?
 - `company_id` 기반 논리 관계가 코드와 문서에 반영되었는가?
 - `btp_support_history.code`와 `btp_support_program.code` 관계가 반영되었는가?
