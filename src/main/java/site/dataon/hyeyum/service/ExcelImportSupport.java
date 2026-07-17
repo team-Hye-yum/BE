@@ -50,6 +50,18 @@ final class ExcelImportSupport {
         return new BigDecimal(value).intValue();
     }
 
+    static Long longInteger(Row row, int index) {
+        String value = text(row, index);
+        if (value == null) {
+            return null;
+        }
+        value = value.replace(",", "").replace(" ", "");
+        if (value.isBlank() || "-".equals(value)) {
+            return null;
+        }
+        return new BigDecimal(value).longValue();
+    }
+
     static Double decimal(Row row, int index) {
         String value = text(row, index);
         if (value == null) {

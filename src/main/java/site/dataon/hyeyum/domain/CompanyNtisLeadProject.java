@@ -64,13 +64,13 @@ public class CompanyNtisLeadProject {
     private String scienceTechnologyCategoryName;
 
     @Column(name = "government_research_fund")
-    private Integer governmentResearchFund;
+    private Long governmentResearchFund;
 
     @Column(name = "private_research_fund")
-    private Integer privateResearchFund;
+    private Long privateResearchFund;
 
     @Column(name = "total_research_fund")
-    private Integer totalResearchFund;
+    private Long totalResearchFund;
 
     @Column(name = "source_hash", nullable = false, length = 64)
     private String sourceHash;

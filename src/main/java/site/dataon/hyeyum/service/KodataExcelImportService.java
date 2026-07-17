@@ -27,6 +27,7 @@ public class KodataExcelImportService {
     public DataImportResult importFile(MultipartFile file) {
         DataImportCounter counter = new DataImportCounter();
         try (InputStream inputStream = file.getInputStream(); Workbook workbook = WorkbookFactory.create(inputStream)) {
+            ensureNtisLeadFundColumnsAreBigint();
             importCompanySheet(workbook.getSheetAt(0), counter);
             importPatentSheet(workbook.getSheetAt(1), counter);
             importNtisLeadSheet(workbook.getSheetAt(2), counter);
@@ -36,6 +37,16 @@ public class KodataExcelImportService {
             throw new IllegalArgumentException("KODATA 엑셀 파일을 읽을 수 없습니다.", exception);
         }
         return new DataImportResult(file.getOriginalFilename(), counter.snapshot());
+    }
+
+    private void ensureNtisLeadFundColumnsAreBigint() {
+        jdbcTemplate.execute(
+                """
+                alter table if exists company_ntis_lead_project
+                    alter column government_research_fund type bigint,
+                    alter column private_research_fund type bigint,
+                    alter column total_research_fund type bigint
+                """);
     }
 
     private void importCompanySheet(org.apache.poi.ss.usermodel.Sheet sheet, DataImportCounter counter) {
@@ -295,9 +306,9 @@ public class KodataExcelImportService {
                     ExcelImportSupport.date(row, 8),
                     ExcelImportSupport.date(row, 9),
                     ExcelImportSupport.text(row, 10),
-                    ExcelImportSupport.integer(row, 11),
-                    ExcelImportSupport.integer(row, 12),
-                    ExcelImportSupport.integer(row, 13),
+                    ExcelImportSupport.longInteger(row, 11),
+                    ExcelImportSupport.longInteger(row, 12),
+                    ExcelImportSupport.longInteger(row, 13),
                     sourceHash);
             counter.increment("company_ntis_lead_project");
         }

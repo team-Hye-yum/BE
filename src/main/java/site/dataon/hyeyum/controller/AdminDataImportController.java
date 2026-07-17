@@ -3,16 +3,19 @@ package site.dataon.hyeyum.controller;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import site.dataon.hyeyum.dto.CompanyMetricRecalculationResult;
 import site.dataon.hyeyum.dto.DataImportResult;
 import site.dataon.hyeyum.dto.DummyDataGenerationResult;
 import site.dataon.hyeyum.service.BtpEquipmentTextImportService;
 import site.dataon.hyeyum.service.BtpSupportExcelImportService;
+import site.dataon.hyeyum.service.CompanyMetricCalculationService;
 import site.dataon.hyeyum.service.DummyDataGenerationService;
 import site.dataon.hyeyum.service.KodataExcelImportService;
 
@@ -25,16 +28,19 @@ public class AdminDataImportController {
     private final BtpSupportExcelImportService btpSupportExcelImportService;
     private final BtpEquipmentTextImportService btpEquipmentTextImportService;
     private final DummyDataGenerationService dummyDataGenerationService;
+    private final CompanyMetricCalculationService companyMetricCalculationService;
 
     public AdminDataImportController(
             KodataExcelImportService kodataExcelImportService,
             BtpSupportExcelImportService btpSupportExcelImportService,
             BtpEquipmentTextImportService btpEquipmentTextImportService,
-            DummyDataGenerationService dummyDataGenerationService) {
+            DummyDataGenerationService dummyDataGenerationService,
+            CompanyMetricCalculationService companyMetricCalculationService) {
         this.kodataExcelImportService = kodataExcelImportService;
         this.btpSupportExcelImportService = btpSupportExcelImportService;
         this.btpEquipmentTextImportService = btpEquipmentTextImportService;
         this.dummyDataGenerationService = dummyDataGenerationService;
+        this.companyMetricCalculationService = companyMetricCalculationService;
     }
 
     @PostMapping(value = "/kodata", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -57,5 +63,10 @@ public class AdminDataImportController {
             @RequestPart("announcementPdf") @NotNull MultipartFile announcementPdf,
             @RequestParam("year") @NotNull Integer year) {
         return dummyDataGenerationService.generate(announcementPdf, year);
+    }
+
+    @GetMapping("/company-metrics")
+    public CompanyMetricRecalculationResult recalculateCompanyMetrics() {
+        return companyMetricCalculationService.recalculateAll();
     }
 }
