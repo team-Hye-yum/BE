@@ -3,6 +3,8 @@ package site.dataon.hyeyum.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -26,6 +28,7 @@ import lombok.NoArgsConstructor;
 public class CompanyEmploymentStatistics {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "employment_statistics_id", nullable = false)
     private Long employmentStatisticsId;
 
@@ -35,7 +38,7 @@ public class CompanyEmploymentStatistics {
     @Column(name = "year")
     private Integer year;
 
-    @Column(name = "employee_counteld3")
+    @Column(name = "employee_count")
     private Integer employeeCount;
 
     @Column(name = "pension_subscriber_count")

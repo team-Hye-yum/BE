@@ -2,8 +2,11 @@ package site.dataon.hyeyum.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -11,11 +14,20 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "btp_support_program")
+@Table(
+        name = "btp_support_program",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_btp_support_program_year_code",
+                        columnNames = {"program_year", "code"}))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BtpSupportProgram {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "support_program_id", nullable = false)
+    private Long supportProgramId;
+
     @Column(name = "code", nullable = false, length = 20)
     private String code;
 

@@ -3,6 +3,8 @@ package site.dataon.hyeyum.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
@@ -25,12 +27,13 @@ import lombok.NoArgsConstructor;
         },
         uniqueConstraints =
                 @UniqueConstraint(
-                        name = "uk_btp_support_history_support_year_code",
-                        columnNames = {"support_year", "code"}))
+                        name = "uk_btp_support_history_source_hash",
+                        columnNames = "source_hash"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BtpSupportHistory {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "support_history_id", nullable = false)
     private Long supportHistoryId;
 
@@ -91,11 +94,10 @@ public class BtpSupportHistory {
     @Column(name = "Field")
     private String field;
 
+    @Column(name = "source_hash", nullable = false, length = 64)
+    private String sourceHash;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "company_id", insertable = false, updatable = false)
     private Company company;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "code", insertable = false, updatable = false)
-    private BtpSupportProgram supportProgram;
 }

@@ -3,11 +3,14 @@ package site.dataon.hyeyum.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -17,11 +20,14 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "company_ntis_collaborative_project",
-        indexes = @Index(name = "idx_company_ntis_collaborative_project_company_reference_year", columnList = "company_id, reference_year"))
+        indexes = @Index(name = "idx_company_ntis_collaborative_project_company_reference_year", columnList = "company_id, reference_year"),
+        uniqueConstraints =
+                @UniqueConstraint(name = "uk_company_ntis_collaborative_project_source_hash", columnNames = "source_hash"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CompanyNtisCollaborativeProject {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ntis_collaborative_project_id", nullable = false)
     private Long ntisCollaborativeProjectId;
 
@@ -69,6 +75,9 @@ public class CompanyNtisCollaborativeProject {
 
     @Column(name = "has_public_institute_collaboration")
     private Boolean hasPublicInstituteCollaboration;
+
+    @Column(name = "source_hash", nullable = false, length = 64)
+    private String sourceHash;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "company_id", insertable = false, updatable = false)

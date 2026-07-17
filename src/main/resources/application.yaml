@@ -1,6 +1,10 @@
 spring:
   application:
     name: hyeyum
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hyeyum}
     username: ${SPRING_DATASOURCE_USERNAME:hyeyum}
