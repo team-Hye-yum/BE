@@ -136,11 +136,11 @@ public class KodataExcelImportService {
         jdbcTemplate.update(
                 """
                 insert into company_employment_statistics (
-                    company_id, year, employee_counteld3, pension_subscriber_count,
+                    company_id, year, employee_count, pension_subscriber_count,
                     pension_new_hire_count, pension_retiree_count, average_salary
                 ) values (?, ?, ?, ?, ?, ?, ?)
                 on conflict (company_id, year) do update set
-                    employee_counteld3 = excluded.employee_counteld3,
+                    employee_count = excluded.employee_count,
                     pension_subscriber_count = excluded.pension_subscriber_count,
                     pension_new_hire_count = excluded.pension_new_hire_count,
                     pension_retiree_count = excluded.pension_retiree_count,

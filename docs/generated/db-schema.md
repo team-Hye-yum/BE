@@ -168,7 +168,7 @@
 | `employment_statistics_id` | BIGINT | 고용 통계 ID |
 | `company_id` | INTEGER | 기업 일련번호 |
 | `year` | INTEGER | 기준 연도 |
-| `employee_counteld3` | INTEGER | 종업원 수. 구현 시 원천 호환명 유지, 도메인 DTO에서는 `employeeCount`로 노출 |
+| `employee_count` | INTEGER | 종업원 수. 구현 시 원천 호환명 유지, 도메인 DTO에서는 `employeeCount`로 노출 |
 | `pension_subscriber_count` | INTEGER | 국민연금 가입자 수 |
 | `pension_new_hire_count` | INTEGER | 국민연금 취업자 수 |
 | `pension_retiree_count` | INTEGER | 국민연금 퇴직자 수 |
@@ -308,7 +308,7 @@ btp_support_program 1 ── N btp_support_history
   - `company_financial_statistics(company_id, year)`
   - `company_patent_statistics(company_id, year)`
   - `btp_support_history(support_year, code)`
-- 원천 DDL의 불명확 필드(`Field`, `employee_counteld3`)는 DB 호환을 위해 보존하되 도메인 DTO에서 의미 있는 이름으로 감싼다.
+- 원천 DDL의 불명확 필드(`Field`, `employee_count`)는 DB 호환을 위해 보존하되 도메인 DTO에서 의미 있는 이름으로 감싼다.
 
 ## Migration 초안 기준
 
@@ -329,5 +329,5 @@ btp_support_program 1 ── N btp_support_history
 - 비율은 DB `REAL`을 허용하되, 계산 정밀도가 중요한 서비스 로직에서는 `BigDecimal`을 검토한다.
 - 날짜는 DB `DATE`, Java `LocalDate`를 사용한다.
 - Boolean은 Java `Boolean`을 사용해 결측과 false를 구분한다.
-- 원천 오타 컬럼 `employee_counteld3`는 DB 컬럼명을 유지하고 Java 필드명은 `employeeCount`로 매핑한다.
+- 원천 오타 컬럼 `employee_count`는 DB 컬럼명을 유지하고 Java 필드명은 `employeeCount`로 매핑한다.
 - `announcement_url`은 DDL상 `VARCHAR(20)`이지만 실제 URL 저장에는 부족할 가능성이 높다. 원천 길이를 확인하고 migration에서 확장 여부를 결정한다.

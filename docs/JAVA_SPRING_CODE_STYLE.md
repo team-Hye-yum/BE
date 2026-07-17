@@ -59,7 +59,7 @@
 예:
 
 ```java
-@Column(name = "employee_counteld3")
+@Column(name = "employee_count")
 private Integer employeeCount;
 ```
 
