@@ -43,6 +43,8 @@ public class CompanyMetricCalculationService {
     }
 
     public CompanyMetricRecalculationResult recalculateAll() {
+        updateIndustryDescriptionsFromKsicInfo();
+
         List<Integer> companyIds = jdbcTemplate.queryForList(
                 "select company_id from company order by company_id",
                 Integer.class);
@@ -83,6 +85,18 @@ public class CompanyMetricCalculationService {
                 updateResult.aiUpdatedCompanyCount(),
                 errors.size(),
                 List.copyOf(errors));
+    }
+
+    private int updateIndustryDescriptionsFromKsicInfo() {
+        int updatedCount = jdbcTemplate.update(
+                """
+                update company
+                set industry_description = ksic_info.industry_description
+                from ksic_info
+                where company.ksic_code = ksic_info.ksic_code
+                """);
+        log.info("Updated company industry descriptions from ksic_info. updatedCount={}", updatedCount);
+        return updatedCount;
     }
 
     private CompanyMetrics calculate(
