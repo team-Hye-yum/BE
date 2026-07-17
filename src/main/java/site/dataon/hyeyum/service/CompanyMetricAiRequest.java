@@ -1,0 +1,36 @@
+package site.dataon.hyeyum.service;
+
+import java.time.LocalDate;
+
+public record CompanyMetricAiRequest(
+        Integer companyId,
+        String companyName,
+        String regionName,
+        LocalDate establishedDate,
+        String businessEntityType,
+        String companySize,
+        String listingStatus,
+        String companyType,
+        String ksicCode,
+        String industryName,
+        String industryDescription,
+        String mainProduct,
+        Boolean isClosed,
+        String companyStatus,
+        Boolean isInnobiz,
+        Boolean isMainbiz,
+        Boolean isVentureCompany,
+        Boolean isMaterialsCompany,
+        Boolean isNetCertified,
+        Boolean isNepCertified,
+        Integer researcherCount,
+        Boolean hasResearchLab,
+        Boolean hasRndDepartment,
+        Double debtRatio,
+        Double costOfSalesRatio,
+        Double salesGrowthRate,
+        Double employmentGrowthRate,
+        Double governmentRndDependency,
+        Double supportedSalesGrowthRate,
+        Double employmentPeakIndex,
+        Double employeeTurnoverRate) {}

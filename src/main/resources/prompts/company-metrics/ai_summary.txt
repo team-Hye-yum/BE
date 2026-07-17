@@ -1,0 +1,36 @@
+다음 기업 정보를 바탕으로 company.ai_summary 컬럼에 저장할 기업 요약을 작성해줘.
+
+작성 규칙:
+- 한국어 4~6문장
+- 사업 개요, 기술/인증 기반, 재무/고용 지표의 특징을 균형 있게 요약
+- 지표는 과장하지 말고 "높다/낮다"처럼 단정하기보다 수치와 맥락을 함께 표현
+- 투자 추천, 자동 선정, 합격 가능성 판단은 쓰지 않기
+- 정보가 없으면 "확인된 데이터 기준"이라는 표현으로 보수적으로 작성
+
+기업 정보:
+- 기업 ID: {{companyId}}
+- 기업명: {{companyName}}
+- 지역: {{regionName}}
+- 설립일: {{establishedDate}}
+- 기업 규모: {{companySize}}
+- 기업 유형: {{companyType}}
+- 산업명: {{industryName}}
+- 주요 제품: {{mainProduct}}
+- 기업 상태: {{companyStatus}}
+- 이노비즈: {{isInnobiz}}
+- 메인비즈: {{isMainbiz}}
+- 벤처기업: {{isVentureCompany}}
+- 소재부품기업: {{isMaterialsCompany}}
+- NET 인증: {{isNetCertified}}
+- NEP 인증: {{isNepCertified}}
+- 연구원 수: {{researcherCount}}
+- 연구소 보유: {{hasResearchLab}}
+- 연구개발전담부서 보유: {{hasRndDepartment}}
+- 부채비율: {{debtRatio}}
+- 매출원가율: {{costOfSalesRatio}}
+- 매출 성장률: {{salesGrowthRate}}
+- 고용 성장률: {{employmentGrowthRate}}
+- 정부 R&D 의존도: {{governmentRndDependency}}
+- 지원 후 매출 성장률: {{supportedSalesGrowthRate}}
+- 고용 피크 지수: {{employmentPeakIndex}}
+- 퇴사/입사 비율: {{employeeTurnoverRate}}

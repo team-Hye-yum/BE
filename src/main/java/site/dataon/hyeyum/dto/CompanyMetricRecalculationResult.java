@@ -5,5 +5,6 @@ import java.util.List;
 public record CompanyMetricRecalculationResult(
         int totalCompanyCount,
         int updatedCompanyCount,
+        int aiUpdatedCompanyCount,
         int failedCompanyCount,
         List<CompanyMetricError> errors) {}

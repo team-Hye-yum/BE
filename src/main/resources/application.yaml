@@ -28,3 +28,6 @@ openai:
   write-timeout-seconds: ${OPENAI_WRITE_TIMEOUT_SECONDS:60}
   read-timeout-seconds: ${OPENAI_READ_TIMEOUT_SECONDS:180}
   call-timeout-seconds: ${OPENAI_CALL_TIMEOUT_SECONDS:240}
+  company-metrics:
+    prompt-directory: ${OPENAI_COMPANY_METRICS_PROMPT_DIRECTORY:}
+    parallelism: ${OPENAI_COMPANY_METRICS_PARALLELISM:3}
