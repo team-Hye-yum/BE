@@ -18,6 +18,7 @@ import site.dataon.hyeyum.service.BtpSupportExcelImportService;
 import site.dataon.hyeyum.service.CompanyMetricCalculationService;
 import site.dataon.hyeyum.service.DummyDataGenerationService;
 import site.dataon.hyeyum.service.KodataExcelImportService;
+import site.dataon.hyeyum.service.KsicInfoTextImportService;
 
 @Validated
 @RestController
@@ -29,18 +30,21 @@ public class AdminDataImportController {
     private final BtpEquipmentTextImportService btpEquipmentTextImportService;
     private final DummyDataGenerationService dummyDataGenerationService;
     private final CompanyMetricCalculationService companyMetricCalculationService;
+    private final KsicInfoTextImportService ksicInfoTextImportService;
 
     public AdminDataImportController(
             KodataExcelImportService kodataExcelImportService,
             BtpSupportExcelImportService btpSupportExcelImportService,
             BtpEquipmentTextImportService btpEquipmentTextImportService,
             DummyDataGenerationService dummyDataGenerationService,
-            CompanyMetricCalculationService companyMetricCalculationService) {
+            CompanyMetricCalculationService companyMetricCalculationService,
+            KsicInfoTextImportService ksicInfoTextImportService) {
         this.kodataExcelImportService = kodataExcelImportService;
         this.btpSupportExcelImportService = btpSupportExcelImportService;
         this.btpEquipmentTextImportService = btpEquipmentTextImportService;
         this.dummyDataGenerationService = dummyDataGenerationService;
         this.companyMetricCalculationService = companyMetricCalculationService;
+        this.ksicInfoTextImportService = ksicInfoTextImportService;
     }
 
     @PostMapping(value = "/kodata", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -56,6 +60,11 @@ public class AdminDataImportController {
     @PostMapping(value = "/btp-equipment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public DataImportResult importBtpEquipment(@RequestPart("file") @NotNull MultipartFile file) {
         return btpEquipmentTextImportService.importFile(file);
+    }
+
+    @PostMapping(value = "/ksic-info", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public DataImportResult importKsicInfo(@RequestPart("file") @NotNull MultipartFile file) {
+        return ksicInfoTextImportService.importFile(file);
     }
 
     @PostMapping(value = "/dummy-data", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

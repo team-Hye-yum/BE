@@ -476,6 +476,7 @@ public class CompanyMetricCalculationService {
                         supported_sales_growth_rate = ?,
                         employment_peak_index = ?,
                         employee_turnover_rate = ?,
+                        industry_brief = coalesce(?, industry_brief),
                         ai_summary = coalesce(?, ai_summary),
                         ai_one_line_summary = coalesce(?, ai_one_line_summary)
                     where company_id = ?
@@ -494,9 +495,10 @@ public class CompanyMetricCalculationService {
                             setDoubleOrNull(ps, 7, metrics.employmentPeakIndex());
                             setDoubleOrNull(ps, 8, metrics.employeeTurnoverRate());
                             CompanyMetricAiText aiText = update.aiText();
-                            ps.setString(9, aiText == null ? null : aiText.aiSummary());
-                            ps.setString(10, aiText == null ? null : aiText.aiOneLineSummary());
-                            ps.setInt(11, update.companyId());
+                            ps.setString(9, aiText == null ? null : aiText.industryBrief());
+                            ps.setString(10, aiText == null ? null : aiText.aiSummary());
+                            ps.setString(11, aiText == null ? null : aiText.aiOneLineSummary());
+                            ps.setInt(12, update.companyId());
                         }
 
                         @Override
@@ -556,6 +558,7 @@ public class CompanyMetricCalculationService {
                     supported_sales_growth_rate = ?,
                     employment_peak_index = ?,
                     employee_turnover_rate = ?,
+                    industry_brief = coalesce(?, industry_brief),
                     ai_summary = coalesce(?, ai_summary),
                     ai_one_line_summary = coalesce(?, ai_one_line_summary)
                 where company_id = ?
@@ -568,6 +571,7 @@ public class CompanyMetricCalculationService {
                 metrics.supportedSalesGrowthRate(),
                 metrics.employmentPeakIndex(),
                 metrics.employeeTurnoverRate(),
+                update.aiText() == null ? null : update.aiText().industryBrief(),
                 update.aiText() == null ? null : update.aiText().aiSummary(),
                 update.aiText() == null ? null : update.aiText().aiOneLineSummary(),
                 update.companyId());

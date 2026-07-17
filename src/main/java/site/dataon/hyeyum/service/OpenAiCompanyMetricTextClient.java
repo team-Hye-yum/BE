@@ -68,6 +68,7 @@ public class OpenAiCompanyMetricTextClient {
             }
             JsonNode result = objectMapper.readTree(outputText);
             return new CompanyMetricAiText(
+                    limited(requiredText(result, "industryBrief"), 4000),
                     limited(requiredText(result, "aiSummary"), 4000),
                     limited(requiredText(result, "aiOneLineSummary"), 1000));
         } catch (IOException exception) {
@@ -111,8 +112,11 @@ public class OpenAiCompanyMetricTextClient {
 
     private String combinedPrompt(CompanyMetricAiRequest request) throws IOException {
         return """
-                Apply each template below and generate values for the two AI columns.
+                Apply each template below and generate values for the three AI columns.
                 Keep each template's rules, but return the final answer using the JSON schema.
+
+                [industryBrief template]
+                %s
 
                 [aiSummary template]
                 %s
@@ -121,6 +125,7 @@ public class OpenAiCompanyMetricTextClient {
                 %s
                 """
                 .formatted(
+                        renderTemplate(loadTemplate("industry_brief.txt"), request),
                         renderTemplate(loadTemplate("ai_summary.txt"), request),
                         renderTemplate(loadTemplate("ai_one_line_summary.txt"), request));
     }
@@ -142,12 +147,15 @@ public class OpenAiCompanyMetricTextClient {
                         false,
                         "properties",
                         Map.of(
+                                "industryBrief",
+                                stringType,
                                 "aiSummary",
                                 stringType,
                                 "aiOneLineSummary",
                                 stringType),
                         "required",
                         new String[] {
+                            "industryBrief",
                             "aiSummary",
                             "aiOneLineSummary"
                         }));
