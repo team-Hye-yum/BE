@@ -14,6 +14,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hyeyum}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hyeyum}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-hyeyum}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
     networks:
       - hyeyum-network
     restart: unless-stopped

@@ -20,3 +20,11 @@ spring:
 server:
   servlet:
     context-path: /api
+
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4.1-mini}
+  connect-timeout-seconds: ${OPENAI_CONNECT_TIMEOUT_SECONDS:30}
+  write-timeout-seconds: ${OPENAI_WRITE_TIMEOUT_SECONDS:60}
+  read-timeout-seconds: ${OPENAI_READ_TIMEOUT_SECONDS:180}
+  call-timeout-seconds: ${OPENAI_CALL_TIMEOUT_SECONDS:240}
