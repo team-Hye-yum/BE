@@ -7,6 +7,5 @@ public record CompanyMetricRecalculationResult(
         int updatedCompanyCount,
         int aiUpdatedCompanyCount,
         int industryBenchmarkMappingUpdatedCompanyCount,
-        int industryBenchmarkIndexUpdatedCount,
         int failedCompanyCount,
         List<CompanyMetricError> errors) {}

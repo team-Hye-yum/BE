@@ -3,8 +3,6 @@ package site.dataon.hyeyum.service;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,9 +27,6 @@ public class CompanyMetricCalculationService {
     private static final Logger log = LoggerFactory.getLogger(CompanyMetricCalculationService.class);
     private static final int CAGR_START_YEAR = 2020;
     private static final int CAGR_END_YEAR = 2024;
-    private static final int INDUSTRY_BENCHMARK_BASE_YEAR = 2021;
-    private static final int INDUSTRY_BENCHMARK_START_YEAR = 2022;
-    private static final int INDUSTRY_BENCHMARK_END_YEAR = 2025;
     private static final String SUPPORTED_SELECTION_RESULT = "지원대상";
 
     private final JdbcTemplate jdbcTemplate;
@@ -69,14 +64,6 @@ public class CompanyMetricCalculationService {
         } catch (RuntimeException exception) {
             log.warn("Failed to upsert company industry benchmark mappings.", exception);
             errors.add(new CompanyMetricError(null, "Company industry benchmark mapping upsert failed: " + rootMessage(exception)));
-        }
-
-        int industryBenchmarkIndexUpdatedCount = 0;
-        try {
-            industryBenchmarkIndexUpdatedCount = upsertIndustryBenchmarkIndexes(errors);
-        } catch (RuntimeException exception) {
-            log.warn("Failed to upsert industry benchmark indexes.", exception);
-            errors.add(new CompanyMetricError(null, "Industry benchmark index upsert failed: " + rootMessage(exception)));
         }
 
         List<Integer> companyIds = jdbcTemplate.queryForList(
@@ -117,7 +104,6 @@ public class CompanyMetricCalculationService {
                 updateResult.updatedCompanyCount(),
                 updateResult.aiUpdatedCompanyCount(),
                 industryBenchmarkMappingUpdatedCompanyCount,
-                industryBenchmarkIndexUpdatedCount,
                 errors.size(),
                 List.copyOf(errors));
     }
@@ -207,192 +193,6 @@ public class CompanyMetricCalculationService {
                     updated_at = excluded.updated_at
                 """);
         log.info("Upserted company industry benchmark mappings. updatedCount={}", updatedCount);
-        return updatedCount;
-    }
-
-    private int upsertIndustryBenchmarkIndexes(List<CompanyMetricError> errors) {
-        Map<String, Map<Integer, GrowthRateRow>> growthRates = industryRevenueGrowthRates();
-        List<IndustryBenchmarkIndexUpdate> updates = new ArrayList<>();
-        for (Map.Entry<String, Map<Integer, GrowthRateRow>> industryEntry : growthRates.entrySet()) {
-            String bokIndustryCode = industryEntry.getKey();
-            Map<Integer, GrowthRateRow> industryGrowthRates = industryEntry.getValue();
-            try {
-                GrowthRateRow startGrowthRate = industryGrowthRates.get(INDUSTRY_BENCHMARK_START_YEAR);
-                if (startGrowthRate == null) {
-                    errors.add(new CompanyMetricError(
-                            null,
-                            "Industry benchmark index skipped. bokIndustryCode="
-                                    + bokIndustryCode
-                                    + ", reason=MISSING_2022_GROWTH_RATE"));
-                    continue;
-                }
-
-                BigDecimal indexValue = BigDecimal.valueOf(100).setScale(10, RoundingMode.HALF_UP);
-                updates.add(new IndustryBenchmarkIndexUpdate(
-                        bokIndustryCode,
-                        INDUSTRY_BENCHMARK_BASE_YEAR,
-                        indexValue,
-                        null,
-                        startGrowthRate.sourceId(),
-                        "BASE_INDEX",
-                        "AVAILABLE",
-                        null));
-
-                for (int year = INDUSTRY_BENCHMARK_START_YEAR; year <= INDUSTRY_BENCHMARK_END_YEAR; year++) {
-                    GrowthRateRow growthRate = industryGrowthRates.get(year);
-                    if (growthRate == null) {
-                        errors.add(new CompanyMetricError(
-                                null,
-                                "Industry benchmark index stopped. bokIndustryCode="
-                                        + bokIndustryCode
-                                        + ", year="
-                                        + year
-                                        + ", reason=MISSING_GROWTH_RATE"));
-                        break;
-                    }
-                    indexValue = indexValue
-                            .multiply(BigDecimal.ONE.add(growthRate.growthRate()
-                                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)))
-                            .setScale(10, RoundingMode.HALF_UP);
-                    updates.add(new IndustryBenchmarkIndexUpdate(
-                            bokIndustryCode,
-                            year,
-                            indexValue,
-                            growthRate.growthRate(),
-                            growthRate.sourceId(),
-                            "CUMULATIVE_GROWTH",
-                            "AVAILABLE",
-                            null));
-                }
-            } catch (RuntimeException exception) {
-                log.warn("Failed to calculate industry benchmark index. bokIndustryCode={}", bokIndustryCode, exception);
-                errors.add(new CompanyMetricError(
-                        null,
-                        "Industry benchmark index calculation failed. bokIndustryCode="
-                                + bokIndustryCode
-                                + ": "
-                                + rootMessage(exception)));
-            }
-        }
-        int updatedCount = batchUpsertIndustryBenchmarkIndexes(updates);
-        log.info("Upserted industry benchmark indexes. updatedCount={}", updatedCount);
-        return updatedCount;
-    }
-
-    private Map<String, Map<Integer, GrowthRateRow>> industryRevenueGrowthRates() {
-        return jdbcTemplate.query(
-                """
-                with ranked_growth_rates as (
-                    select
-                        source.source_id,
-                        metric.bok_industry_code,
-                        metric.year,
-                        metric.value as growth_rate,
-                        row_number() over (
-                            partition by metric.bok_industry_code, metric.year
-                            order by
-                                case source.release_version
-                                    when 'FINAL' then 1
-                                    when 'PRELIMINARY' then 2
-                                    else 3
-                                end,
-                                source.source_id desc
-                        ) as row_number
-                    from industry_benchmark_metric metric
-                    join industry_benchmark_source source
-                      on source.source_id = metric.source_id
-                    where metric.metric = 'REVENUE_GROWTH_RATE'
-                      and metric.data_status = 'OBSERVED'
-                      and metric.value is not null
-                      and metric.year between ? and ?
-                )
-                select source_id, bok_industry_code, year, growth_rate
-                from ranked_growth_rates
-                where row_number = 1
-                order by bok_industry_code, year
-                """,
-                rs -> {
-                    Map<String, Map<Integer, GrowthRateRow>> rows = new HashMap<>();
-                    while (rs.next()) {
-                        rows.computeIfAbsent(rs.getString("bok_industry_code"), ignored -> new HashMap<>())
-                                .put(
-                                        rs.getInt("year"),
-                                        new GrowthRateRow(
-                                                rs.getLong("source_id"),
-                                                rs.getString("bok_industry_code"),
-                                                rs.getInt("year"),
-                                                rs.getBigDecimal("growth_rate")));
-                    }
-                    return rows;
-                },
-                INDUSTRY_BENCHMARK_START_YEAR,
-                INDUSTRY_BENCHMARK_END_YEAR);
-    }
-
-    private int batchUpsertIndustryBenchmarkIndexes(List<IndustryBenchmarkIndexUpdate> updates) {
-        if (updates.isEmpty()) {
-            return 0;
-        }
-        int[] results = jdbcTemplate.batchUpdate(
-                """
-                insert into industry_benchmark_index (
-                    bok_industry_code,
-                    metric,
-                    base_year,
-                    year,
-                    index_value,
-                    growth_rate,
-                    source_id,
-                    calculation_type,
-                    availability_status,
-                    unavailable_reason
-                ) values (
-                    ?,
-                    'REVENUE_INDEX',
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                )
-                on conflict (source_id, bok_industry_code, metric, base_year, year) do update set
-                    index_value = excluded.index_value,
-                    growth_rate = excluded.growth_rate,
-                    calculation_type = excluded.calculation_type,
-                    availability_status = excluded.availability_status,
-                    unavailable_reason = excluded.unavailable_reason
-                """,
-                new BatchPreparedStatementSetter() {
-                    @Override
-                    public void setValues(PreparedStatement ps, int i) throws SQLException {
-                        IndustryBenchmarkIndexUpdate update = updates.get(i);
-                        ps.setString(1, update.bokIndustryCode());
-                        ps.setInt(2, INDUSTRY_BENCHMARK_BASE_YEAR);
-                        ps.setInt(3, update.year());
-                        ps.setBigDecimal(4, update.indexValue());
-                        ps.setBigDecimal(5, update.growthRate());
-                        ps.setLong(6, update.sourceId());
-                        ps.setString(7, update.calculationType());
-                        ps.setString(8, update.availabilityStatus());
-                        ps.setString(9, update.unavailableReason());
-                    }
-
-                    @Override
-                    public int getBatchSize() {
-                        return updates.size();
-                    }
-                });
-        int updatedCount = 0;
-        for (int result : results) {
-            if (result >= 0) {
-                updatedCount += result;
-            } else if (result == Statement.SUCCESS_NO_INFO) {
-                updatedCount++;
-            }
-        }
         return updatedCount;
     }
 
@@ -950,22 +750,6 @@ public class CompanyMetricCalculationService {
     private record CompanyMetricUpdate(Integer companyId, CompanyMetrics metrics, CompanyMetricAiText aiText) {}
 
     private record CompanyMetricUpdateResult(int updatedCompanyCount, int aiUpdatedCompanyCount) {}
-
-    private record GrowthRateRow(
-            Long sourceId,
-            String bokIndustryCode,
-            Integer year,
-            BigDecimal growthRate) {}
-
-    private record IndustryBenchmarkIndexUpdate(
-            String bokIndustryCode,
-            Integer year,
-            BigDecimal indexValue,
-            BigDecimal growthRate,
-            Long sourceId,
-            String calculationType,
-            String availabilityStatus,
-            String unavailableReason) {}
 
     private record CompanyMetrics(
             Double debtRatio,
