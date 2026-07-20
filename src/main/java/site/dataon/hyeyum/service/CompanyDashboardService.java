@@ -17,7 +17,6 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,10 +69,7 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ProductiveActivitiesSummaryResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ResearchOrganization;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportDuplicateCandidate;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportDuplicationReviewResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportHistoriesSummary;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportHistoryBrief;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportMarker;
 import site.dataon.hyeyum.repository.BtpSupportHistoryRepository;
 import site.dataon.hyeyum.repository.CompanyEmploymentStatisticsRepository;
@@ -390,42 +386,6 @@ public class CompanyDashboardService {
     }
 
     @Transactional(readOnly = true)
-    public ApiDataResponse<SupportDuplicationReviewResponse> supportDuplicationReview(Integer companyId) {
-        findCompany(companyId);
-        List<BtpSupportHistory> histories = supportHistoryRepository.findByCompanyIdOrderBySupportYearAscSupportHistoryIdAsc(companyId);
-        Map<String, List<BtpSupportHistory>> grouped = histories.stream()
-                .collect(Collectors.groupingBy(
-                        history -> normalizedKey(history.getBudgetProgramName()) + "|" + normalizedKey(history.getSupportItem()),
-                        LinkedHashMap::new,
-                        Collectors.toList()));
-        List<SupportDuplicateCandidate> candidates = grouped.values().stream()
-                .filter(group -> group.size() > 1)
-                .map(group -> new SupportDuplicateCandidate(
-                        group.getFirst().getBudgetProgramName(),
-                        group.getFirst().getSupportItem(),
-                        group.stream()
-                                .map(BtpSupportHistory::getSupportYear)
-                                .filter(Objects::nonNull)
-                                .distinct()
-                                .sorted()
-                                .toList(),
-                        group.size()))
-                .toList();
-        List<SupportHistoryBrief> briefs = histories.stream()
-                .map(history -> new SupportHistoryBrief(
-                        history.getSupportHistoryId(),
-                        history.getSupportYear(),
-                        history.getBudgetProgramName(),
-                        history.getSupportType(),
-                        history.getSupportCategory(),
-                        history.getSupportItem(),
-                        formatDate(history.getSelectedDate()),
-                        new MoneyValue(history.getSupportAmount(), KRW_THOUSAND)))
-                .toList();
-        return new ApiDataResponse<>(new SupportDuplicationReviewResponse(companyId, histories.size(), candidates, briefs));
-    }
-
-    @Transactional(readOnly = true)
     public ApiDataResponse<AiSummaryResponse> aiSummary(Integer companyId) {
         return new ApiDataResponse<>(new AiSummaryResponse(findCompany(companyId).getAiSummary()));
     }
@@ -602,10 +562,6 @@ public class CompanyDashboardService {
         LocalDate baseDate = referenceDate == null ? LocalDate.now() : referenceDate;
         int age = baseDate.getYear() - establishedDate.getYear();
         return baseDate.getDayOfYear() < establishedDate.getDayOfYear() ? age - 1 : age;
-    }
-
-    private String normalizedKey(String value) {
-        return value == null ? "" : value.replaceAll("\\s+", "").toLowerCase();
     }
 
     private String text(Element element, String tagName) {

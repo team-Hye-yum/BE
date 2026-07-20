@@ -149,21 +149,6 @@ public final class CompanyDashboardResponses {
             String endDate,
             Integer supportYear) {}
 
-    public record SupportDuplicationReviewResponse(
-            Integer companyId, int totalSupportCount, List<SupportDuplicateCandidate> duplicateCandidates, List<SupportHistoryBrief> histories) {}
-
-    public record SupportDuplicateCandidate(String programName, String supportItem, List<Integer> supportYears, int count) {}
-
-    public record SupportHistoryBrief(
-            Long supportHistoryId,
-            Integer supportYear,
-            String programName,
-            String supportType,
-            String supportCategory,
-            String supportItem,
-            String selectedDate,
-            MoneyValue supportAmount) {}
-
     public record AiSummaryResponse(String aiSummary) {}
 
     public record NewsResponse(Integer companyId, String companyName, String status, List<NewsItem> items) {}

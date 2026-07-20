@@ -28,7 +28,6 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProject
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ProductiveActivitiesSummaryResponse;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportDuplicationReviewResponse;
 import site.dataon.hyeyum.service.CompanyDashboardService;
 
 @Validated
@@ -161,17 +160,6 @@ public class CompanyDashboardController {
     })
     public ApiDataResponse<GrowthScenarioResponse> growthScenario(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.growthScenario(companyId);
-    }
-
-    @GetMapping("/support-duplication-review")
-    @Operation(summary = "중복지원 검토", description = "기업의 지원 이력을 반환하고, 동일 사업명·지원품목 기준의 잠재 중복 후보를 함께 제공한다.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "중복지원 검토 조회 성공"),
-        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
-    })
-    public ApiDataResponse<SupportDuplicationReviewResponse> supportDuplicationReview(
-            @PathVariable("companyId") @NotNull Integer companyId) {
-        return companyDashboardService.supportDuplicationReview(companyId);
     }
 
     @GetMapping("/ai-summary")
