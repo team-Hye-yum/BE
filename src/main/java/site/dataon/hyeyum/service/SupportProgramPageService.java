@@ -17,6 +17,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,10 +39,12 @@ import site.dataon.hyeyum.dto.SupportProgramSearchResponse;
 import site.dataon.hyeyum.dto.YearlyMoneyAmount;
 import site.dataon.hyeyum.repository.BtpSupportProgramRepository;
 import site.dataon.hyeyum.repository.SupportProgramCompanyProjection;
+import site.dataon.hyeyum.search.SupportProgramElasticsearchService;
 
 @Service
 public class SupportProgramPageService {
 
+    private static final Logger log = LoggerFactory.getLogger(SupportProgramPageService.class);
     private static final DateTimeFormatter COMPACT_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String[] COMPANY_LIST_HEADERS = {
@@ -66,18 +70,28 @@ public class SupportProgramPageService {
     private final BtpSupportProgramRepository supportProgramRepository;
     private final OpenAiSupportProgramAnalysisClient analysisClient;
     private final CompanyTemplateImportService companyTemplateImportService;
+    private final SupportProgramElasticsearchService elasticsearchService;
 
     public SupportProgramPageService(
             BtpSupportProgramRepository supportProgramRepository,
             OpenAiSupportProgramAnalysisClient analysisClient,
-            CompanyTemplateImportService companyTemplateImportService) {
+            CompanyTemplateImportService companyTemplateImportService,
+            SupportProgramElasticsearchService elasticsearchService) {
         this.supportProgramRepository = supportProgramRepository;
         this.analysisClient = analysisClient;
         this.companyTemplateImportService = companyTemplateImportService;
+        this.elasticsearchService = elasticsearchService;
     }
 
     public ApiDataResponse<SupportProgramSearchResponse> search(String keyword) {
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        if (elasticsearchService.enabled()) {
+            try {
+                return new ApiDataResponse<>(new SupportProgramSearchResponse(elasticsearchService.search(normalizedKeyword)));
+            } catch (RuntimeException exception) {
+                log.warn("Elasticsearch support program search failed. Falling back to database search.", exception);
+            }
+        }
         List<SupportProgramSearchItem> items = supportProgramRepository.search(normalizedKeyword).stream()
                 .map(this::mapSearchItem)
                 .toList();
@@ -185,6 +199,7 @@ public class SupportProgramPageService {
                             limit(request.programSummary(), 1000));
         }
         BtpSupportProgram savedProgram = supportProgramRepository.save(supportProgram);
+        elasticsearchService.index(savedProgram);
         return new ApiDataResponse<>(new SupportProgramSaveResponse(savedProgram.getCode(), !exists));
     }
 

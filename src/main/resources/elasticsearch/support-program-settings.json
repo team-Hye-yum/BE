@@ -1,0 +1,24 @@
+{
+  "index": {
+    "max_ngram_diff": 29,
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "analysis": {
+    "analyzer": {
+      "support_ngram_analyzer": {
+        "type": "custom",
+        "tokenizer": "support_ngram_tokenizer",
+        "filter": ["lowercase"]
+      }
+    },
+    "tokenizer": {
+      "support_ngram_tokenizer": {
+        "type": "ngram",
+        "min_gram": 1,
+        "max_gram": 30,
+        "token_chars": ["letter", "digit", "punctuation", "symbol"]
+      }
+    }
+  }
+}

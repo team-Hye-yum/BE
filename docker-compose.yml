@@ -4,8 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: hyeyum-be
+    mem_limit: ${APP_MEM_LIMIT:-768m}
     depends_on:
       db:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     ports:
       - "${APP_PORT:-8080}:8080"
@@ -14,6 +17,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hyeyum}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hyeyum}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-hyeyum}
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED: ${SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED:-true}
+      SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_ENABLED: ${SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_ENABLED:-true}
+      JAVA_TOOL_OPTIONS: ${APP_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=20}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_COMPANY_METRICS_PROMPT_DIRECTORY: ${OPENAI_COMPANY_METRICS_PROMPT_DIRECTORY:-}
@@ -22,9 +29,32 @@ services:
       - hyeyum-network
     restart: unless-stopped
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.2
+    container_name: hyeyum-elasticsearch
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-640m}
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms192m -Xmx192m}
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - hyeyum-network
+    restart: unless-stopped
+
   db:
     image: postgres:16-alpine
     container_name: hyeyum-postgres
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
+    command: postgres -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB} -c work_mem=${POSTGRES_WORK_MEM:-4MB} -c maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hyeyum}
       POSTGRES_USER: ${POSTGRES_USER:-hyeyum}
@@ -44,6 +74,7 @@ services:
 
 volumes:
   postgres_data:
+  elasticsearch_data:
 
 networks:
   hyeyum-network:

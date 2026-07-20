@@ -10,6 +10,12 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:hyeyum}
     password: ${SPRING_DATASOURCE_PASSWORD:hyeyum}
     driver-class-name: org.postgresql.Driver
+  elasticsearch:
+    uris: ${SPRING_ELASTICSEARCH_URIS:http://localhost:9200}
+  data:
+    elasticsearch:
+      repositories:
+        enabled: false
   jpa:
     hibernate:
       ddl-auto: update
@@ -39,3 +45,12 @@ openai:
   company-metrics:
     prompt-directory: ${OPENAI_COMPANY_METRICS_PROMPT_DIRECTORY:}
     parallelism: ${OPENAI_COMPANY_METRICS_PARALLELISM:5}
+
+support-program-search:
+  elasticsearch:
+    enabled: ${SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED:true}
+    startup-sync-enabled: ${SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_ENABLED:true}
+    startup-sync-initial-delay-seconds: ${SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_INITIAL_DELAY_SECONDS:10}
+    startup-sync-max-attempts: ${SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_MAX_ATTEMPTS:12}
+    startup-sync-retry-delay-seconds: ${SUPPORT_PROGRAM_SEARCH_STARTUP_SYNC_RETRY_DELAY_SECONDS:5}
+    result-size: ${SUPPORT_PROGRAM_SEARCH_RESULT_SIZE:100}
