@@ -83,17 +83,19 @@ public class SupportProgramPageService {
         this.elasticsearchService = elasticsearchService;
     }
 
-    public ApiDataResponse<SupportProgramSearchResponse> search(String keyword) {
+    public ApiDataResponse<SupportProgramSearchResponse> search(String keyword, int limit) {
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        int resultLimit = Math.max(1, limit);
         if (elasticsearchService.enabled()) {
             try {
-                return new ApiDataResponse<>(new SupportProgramSearchResponse(elasticsearchService.search(normalizedKeyword)));
+                return new ApiDataResponse<>(new SupportProgramSearchResponse(elasticsearchService.search(normalizedKeyword, resultLimit)));
             } catch (RuntimeException exception) {
                 log.warn("Elasticsearch support program search failed. Falling back to database search.", exception);
             }
         }
         List<SupportProgramSearchItem> items = supportProgramRepository.search(normalizedKeyword).stream()
                 .map(this::mapSearchItem)
+                .limit(resultLimit)
                 .toList();
         return new ApiDataResponse<>(new SupportProgramSearchResponse(items));
     }

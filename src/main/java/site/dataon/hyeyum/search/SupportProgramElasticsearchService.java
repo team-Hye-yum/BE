@@ -40,14 +40,14 @@ public class SupportProgramElasticsearchService {
         return properties.enabled();
     }
 
-    public List<SupportProgramSearchItem> search(String keyword) {
+    public List<SupportProgramSearchItem> search(String keyword, int limit) {
         String normalized = KoreanSearchText.normalizedText(keyword);
         String chosung = KoreanSearchText.chosung(normalized);
         String jamo = KoreanSearchText.jamo(normalized);
         try {
             SearchResponse<Map> response = client.search(search -> search
                     .index("support-programs")
-                    .size(Math.max(1, properties.resultSize()))
+                    .size(Math.max(1, limit))
                     .query(query -> query.bool(bool -> bool
                             .minimumShouldMatch("1")
                             .should(should -> should.term(term -> term

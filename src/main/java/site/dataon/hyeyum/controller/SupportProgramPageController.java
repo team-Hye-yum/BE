@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ContentDisposition;
@@ -47,8 +48,9 @@ public class SupportProgramPageController {
     @GetMapping("/search")
     @Operation(summary = "지원 사업 키워드 검색", description = "검색창 key event마다 호출해 키워드가 포함된 지원 사업 목록을 반환한다.")
     public ApiDataResponse<SupportProgramSearchResponse> search(
-            @Parameter(description = "지원 사업명 검색어", example = "성장 사다리") @RequestParam("keyword") @NotBlank String keyword) {
-        return supportProgramPageService.search(keyword);
+            @Parameter(description = "지원 사업명 검색어", example = "성장 사다리") @RequestParam("keyword") @NotBlank String keyword,
+            @Parameter(description = "검색 결과 개수", example = "3") @RequestParam(value = "limit", defaultValue = "3") @Min(1) int limit) {
+        return supportProgramPageService.search(keyword, limit);
     }
 
     @GetMapping("/{supportProgramCode}/companies")
