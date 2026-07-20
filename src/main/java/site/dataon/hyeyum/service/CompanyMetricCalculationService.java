@@ -7,11 +7,14 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +35,7 @@ public class CompanyMetricCalculationService {
     private final JdbcTemplate jdbcTemplate;
     private final OpenAiCompanyMetricTextClient openAiCompanyMetricTextClient;
     private final int aiParallelism;
+    private final ExecutorService backgroundAiExecutor = Executors.newSingleThreadExecutor();
 
     public CompanyMetricCalculationService(
             JdbcTemplate jdbcTemplate,
@@ -42,7 +46,14 @@ public class CompanyMetricCalculationService {
         this.aiParallelism = Math.max(1, aiParallelism);
     }
 
+    @PreDestroy
+    void shutdownBackgroundAiExecutor() {
+        backgroundAiExecutor.shutdown();
+    }
+
     public CompanyMetricRecalculationResult recalculateAll() {
+        long startedAt = System.nanoTime();
+        log.info("Company metric recalculation started. includeAi=true");
         List<CompanyMetricError> errors = Collections.synchronizedList(new ArrayList<>());
         try {
             updateIndustryDescriptionsFromKsicInfo();
@@ -66,16 +77,25 @@ public class CompanyMetricCalculationService {
             errors.add(new CompanyMetricError(null, "Company industry benchmark mapping upsert failed: " + rootMessage(exception)));
         }
 
+        log.info("Loading company metric source data started.");
         List<Integer> companyIds = jdbcTemplate.queryForList(
                 "select company_id from company order by company_id",
                 Integer.class);
+        log.info("Loaded company ids. count={}", companyIds.size());
         Map<Integer, FinancialRow> latestFinancials = latestFinancials();
+        log.info("Loaded latest financials. count={}", latestFinancials.size());
         Map<Integer, EmploymentRow> latestEmployments = latestEmployments();
+        log.info("Loaded latest employments. count={}", latestEmployments.size());
         Map<Integer, Double> salesGrowthRates = fixedYearFinancialCagrs();
+        log.info("Calculated fixed-year financial CAGR values. count={}", salesGrowthRates.size());
         Map<Integer, Double> employmentGrowthRates = fixedYearEmploymentCagrs();
+        log.info("Calculated fixed-year employment CAGR values. count={}", employmentGrowthRates.size());
         Map<Integer, Double> governmentRndDependencies = governmentRndDependencies();
+        log.info("Calculated government R&D dependencies. count={}", governmentRndDependencies.size());
         Map<Integer, Double> supportedSalesGrowthRates = averageSupportedSalesGrowthRates();
+        log.info("Calculated supported sales growth rates. count={}", supportedSalesGrowthRates.size());
         Map<Integer, CompanyProfile> companyProfiles = companyProfiles();
+        log.info("Loaded company profiles. count={}", companyProfiles.size());
 
         List<CompanyMetricPendingUpdate> pendingUpdates = new ArrayList<>();
         for (Integer companyId : companyIds) {
@@ -96,9 +116,17 @@ public class CompanyMetricCalculationService {
                 errors.add(new CompanyMetricError(companyId, rootMessage(exception)));
             }
         }
+        log.info("Calculated numeric company metrics. pendingUpdates={}", pendingUpdates.size());
 
         List<CompanyMetricUpdate> updates = generateAiTexts(pendingUpdates, companyProfiles, errors);
         CompanyMetricUpdateResult updateResult = batchUpdate(updates, errors);
+        log.info(
+                "Company metric recalculation finished. totalCompanies={}, updatedCompanies={}, aiUpdatedCompanies={}, errors={}, elapsedMs={}",
+                companyIds.size(),
+                updateResult.updatedCompanyCount(),
+                updateResult.aiUpdatedCompanyCount(),
+                errors.size(),
+                elapsedMillis(startedAt));
         return new CompanyMetricRecalculationResult(
                 companyIds.size(),
                 updateResult.updatedCompanyCount(),
@@ -106,6 +134,76 @@ public class CompanyMetricCalculationService {
                 industryBenchmarkMappingUpdatedCompanyCount,
                 errors.size(),
                 List.copyOf(errors));
+    }
+
+    public int recalculateNumericMetrics(Set<Integer> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) {
+            return 0;
+        }
+        long startedAt = System.nanoTime();
+        Set<Integer> targetCompanyIds = new HashSet<>(companyIds);
+        log.info("Company metric numeric recalculation started. companyCount={}", targetCompanyIds.size());
+        List<CompanyMetricPendingUpdate> pendingUpdates = pendingUpdates(targetCompanyIds, Collections.synchronizedList(new ArrayList<>()));
+        CompanyMetricUpdateResult updateResult = batchUpdate(withoutAiTexts(pendingUpdates), Collections.synchronizedList(new ArrayList<>()));
+        log.info(
+                "Company metric numeric recalculation finished. companyCount={}, updatedCompanies={}, elapsedMs={}",
+                targetCompanyIds.size(),
+                updateResult.updatedCompanyCount(),
+                elapsedMillis(startedAt));
+        return updateResult.updatedCompanyCount();
+    }
+
+    public void generateAiTextsAsync(Set<Integer> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) {
+            return;
+        }
+        Set<Integer> targetCompanyIds = new HashSet<>(companyIds);
+        backgroundAiExecutor.submit(() -> {
+            long startedAt = System.nanoTime();
+            log.info("Company metric background AI text generation started. companyCount={}", targetCompanyIds.size());
+            List<CompanyMetricError> errors = Collections.synchronizedList(new ArrayList<>());
+            try {
+                List<CompanyMetricPendingUpdate> pendingUpdates = pendingUpdates(targetCompanyIds, errors);
+                Map<Integer, CompanyProfile> companyProfiles = companyProfiles(targetCompanyIds);
+                List<CompanyMetricUpdate> updates = generateAiTexts(pendingUpdates, companyProfiles, errors);
+                CompanyMetricUpdateResult updateResult = batchUpdate(updates, errors);
+                log.info(
+                        "Company metric background AI text generation finished. companyCount={}, aiUpdatedCompanies={}, errors={}, elapsedMs={}",
+                        targetCompanyIds.size(),
+                        updateResult.aiUpdatedCompanyCount(),
+                        errors.size(),
+                        elapsedMillis(startedAt));
+            } catch (RuntimeException exception) {
+                log.warn("Company metric background AI text generation failed. companyIds={}", targetCompanyIds, exception);
+            }
+        });
+    }
+
+    private List<CompanyMetricPendingUpdate> pendingUpdates(Set<Integer> companyIds, List<CompanyMetricError> errors) {
+        Map<Integer, FinancialRow> latestFinancials = latestFinancials();
+        Map<Integer, EmploymentRow> latestEmployments = latestEmployments();
+        Map<Integer, Double> salesGrowthRates = fixedYearFinancialCagrs();
+        Map<Integer, Double> employmentGrowthRates = fixedYearEmploymentCagrs();
+        Map<Integer, Double> governmentRndDependencies = governmentRndDependencies();
+        Map<Integer, Double> supportedSalesGrowthRates = averageSupportedSalesGrowthRates();
+        List<CompanyMetricPendingUpdate> pendingUpdates = new ArrayList<>();
+        for (Integer companyId : companyIds) {
+            try {
+                CompanyMetrics metrics =
+                        calculate(
+                                latestFinancials.get(companyId),
+                                latestEmployments.get(companyId),
+                                salesGrowthRates.get(companyId),
+                                employmentGrowthRates.get(companyId),
+                                governmentRndDependencies.get(companyId),
+                                supportedSalesGrowthRates.get(companyId));
+                pendingUpdates.add(new CompanyMetricPendingUpdate(companyId, metrics));
+            } catch (RuntimeException exception) {
+                log.warn("Failed to calculate company metrics. companyId={}", companyId, exception);
+                errors.add(new CompanyMetricError(companyId, rootMessage(exception)));
+            }
+        }
+        return pendingUpdates;
     }
 
     private int updateIndustryDescriptionsFromKsicInfo() {
@@ -308,6 +406,59 @@ public class CompanyMetricCalculationService {
                 });
     }
 
+    private Map<Integer, CompanyProfile> companyProfiles(Set<Integer> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", companyIds.stream().map(ignored -> "?").toList());
+        return jdbcTemplate.query(
+                """
+                select company_id, company_name, region_name, established_date, business_entity_type,
+                       company_size, listing_status, company_type, ksic_code, industry_name,
+                       industry_description, main_product, is_closed, company_status,
+                       is_innobiz, is_mainbiz, is_venture_company, is_materials_company,
+                       is_net_certified, is_nep_certified, researcher_count, has_research_lab,
+                       has_rnd_department
+                from company
+                where company_id in (
+                """
+                        + placeholders
+                        + ")",
+                rs -> {
+                    Map<Integer, CompanyProfile> rows = new HashMap<>();
+                    while (rs.next()) {
+                        rows.put(
+                                rs.getInt("company_id"),
+                                new CompanyProfile(
+                                        rs.getInt("company_id"),
+                                        rs.getString("company_name"),
+                                        rs.getString("region_name"),
+                                        rs.getObject("established_date", LocalDate.class),
+                                        rs.getString("business_entity_type"),
+                                        rs.getString("company_size"),
+                                        rs.getString("listing_status"),
+                                        rs.getString("company_type"),
+                                        rs.getString("ksic_code"),
+                                        rs.getString("industry_name"),
+                                        rs.getString("industry_description"),
+                                        rs.getString("main_product"),
+                                        booleanOrNull(rs.getObject("is_closed")),
+                                        rs.getString("company_status"),
+                                        booleanOrNull(rs.getObject("is_innobiz")),
+                                        booleanOrNull(rs.getObject("is_mainbiz")),
+                                        booleanOrNull(rs.getObject("is_venture_company")),
+                                        booleanOrNull(rs.getObject("is_materials_company")),
+                                        booleanOrNull(rs.getObject("is_net_certified")),
+                                        booleanOrNull(rs.getObject("is_nep_certified")),
+                                        integerOrNull(rs.getObject("researcher_count")),
+                                        booleanOrNull(rs.getObject("has_research_lab")),
+                                        booleanOrNull(rs.getObject("has_rnd_department"))));
+                    }
+                    return rows;
+                },
+                companyIds.toArray());
+    }
+
     private Map<Integer, Double> fixedYearFinancialCagrs() {
         return fixedYearCagrs(
                 """
@@ -464,11 +615,17 @@ public class CompanyMetricCalculationService {
             List<CompanyMetricPendingUpdate> pendingUpdates,
             Map<Integer, CompanyProfile> companyProfiles,
             List<CompanyMetricError> errors) {
+        long startedAt = System.nanoTime();
+        log.info(
+                "Company metric AI text generation started. pendingUpdates={}, parallelism={}",
+                pendingUpdates.size(),
+                aiParallelism);
         if (aiParallelism == 1 || pendingUpdates.size() <= 1) {
             List<CompanyMetricUpdate> updates = new ArrayList<>();
             for (CompanyMetricPendingUpdate pendingUpdate : pendingUpdates) {
                 updates.add(withAiText(pendingUpdate, companyProfiles.get(pendingUpdate.companyId()), errors));
             }
+            log.info("Company metric AI text generation finished. updates={}, elapsedMs={}", updates.size(), elapsedMillis(startedAt));
             return updates;
         }
 
@@ -483,10 +640,20 @@ public class CompanyMetricCalculationService {
             for (CompletableFuture<CompanyMetricUpdate> future : futures) {
                 updates.add(future.join());
             }
+            log.info("Company metric AI text generation finished. updates={}, elapsedMs={}", updates.size(), elapsedMillis(startedAt));
             return updates;
         } finally {
             executorService.shutdown();
         }
+    }
+
+    private List<CompanyMetricUpdate> withoutAiTexts(List<CompanyMetricPendingUpdate> pendingUpdates) {
+        return pendingUpdates.stream()
+                .map(pendingUpdate -> new CompanyMetricUpdate(
+                        pendingUpdate.companyId(),
+                        pendingUpdate.metrics(),
+                        null))
+                .toList();
     }
 
     private CompanyMetricUpdate withAiText(
@@ -704,6 +871,10 @@ public class CompanyMetricCalculationService {
             current = current.getCause();
         }
         return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     private record FinancialRow(

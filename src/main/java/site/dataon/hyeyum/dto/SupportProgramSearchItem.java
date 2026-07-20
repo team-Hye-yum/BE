@@ -1,7 +1,6 @@
 package site.dataon.hyeyum.dto;
 
 public record SupportProgramSearchItem(
-        Long supportProgramId,
         String code,
         Integer programYear,
         String budgetProgramName,

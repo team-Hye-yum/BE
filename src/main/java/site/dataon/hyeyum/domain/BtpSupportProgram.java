@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
@@ -17,6 +18,7 @@ import org.hibernate.annotations.Comment;
 @Entity
 @Table(
         name = "btp_support_program",
+        indexes = @Index(name = "idx_btp_support_program_code", columnList = "code"),
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_btp_support_program_year_code",

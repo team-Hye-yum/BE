@@ -11,6 +11,8 @@ public interface BtpSupportProgramRepository extends JpaRepository<BtpSupportPro
 
     Optional<BtpSupportProgram> findByProgramYearAndCode(Integer programYear, String code);
 
+    Optional<BtpSupportProgram> findFirstByCodeOrderByProgramYearDescSupportProgramIdDesc(String code);
+
     @Query(
             """
             select p

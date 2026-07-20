@@ -1,5 +1,7 @@
 package site.dataon.hyeyum.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
@@ -23,6 +25,7 @@ import site.dataon.hyeyum.service.KsicInfoTextImportService;
 @Validated
 @RestController
 @RequestMapping("/admin/imports")
+@Tag(name = "Admin Imports", description = "관리자 데이터 import API")
 public class AdminDataImportController {
 
     private final KodataExcelImportService kodataExcelImportService;
@@ -48,26 +51,31 @@ public class AdminDataImportController {
     }
 
     @PostMapping(value = "/kodata", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "KODATA Excel import")
     public DataImportResult importKodata(@RequestPart("file") @NotNull MultipartFile file) {
         return kodataExcelImportService.importFile(file);
     }
 
     @PostMapping(value = "/btp-supports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "BTP 지원사업 Excel import")
     public DataImportResult importBtpSupports(@RequestPart("file") @NotNull MultipartFile file) {
         return btpSupportExcelImportService.importFile(file);
     }
 
     @PostMapping(value = "/btp-equipment", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "BTP 장비 텍스트 import")
     public DataImportResult importBtpEquipment(@RequestPart("file") @NotNull MultipartFile file) {
         return btpEquipmentTextImportService.importFile(file);
     }
 
     @PostMapping(value = "/ksic-info", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "KSIC 업종 설명 import")
     public DataImportResult importKsicInfo(@RequestPart("file") @NotNull MultipartFile file) {
         return ksicInfoTextImportService.importFile(file);
     }
 
     @PostMapping(value = "/dummy-data", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "더미 기업 데이터 생성")
     public DummyDataGenerationResult generateDummyData(
             @RequestPart("announcementPdf") @NotNull MultipartFile announcementPdf,
             @RequestParam("year") @NotNull Integer year) {
@@ -75,6 +83,7 @@ public class AdminDataImportController {
     }
 
     @GetMapping("/company-metrics")
+    @Operation(summary = "기업 계산 지표 재계산")
     public CompanyMetricRecalculationResult recalculateCompanyMetrics() {
         return companyMetricCalculationService.recalculateAll();
     }

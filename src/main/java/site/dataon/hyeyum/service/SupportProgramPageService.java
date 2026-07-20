@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -17,10 +16,8 @@ import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,7 +34,6 @@ import site.dataon.hyeyum.dto.SupportProgramSaveRequest;
 import site.dataon.hyeyum.dto.SupportProgramSaveResponse;
 import site.dataon.hyeyum.dto.SupportProgramSearchItem;
 import site.dataon.hyeyum.dto.SupportProgramSearchResponse;
-import site.dataon.hyeyum.dto.YearlyCount;
 import site.dataon.hyeyum.dto.YearlyMoneyAmount;
 import site.dataon.hyeyum.repository.BtpSupportProgramRepository;
 import site.dataon.hyeyum.repository.SupportProgramCompanyProjection;
@@ -49,7 +45,6 @@ public class SupportProgramPageService {
     private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String[] COMPANY_LIST_HEADERS = {
         "기업명",
-        "사업자번호(일련번호)",
         "지역",
         "설립연도",
         "업종",
@@ -59,9 +54,7 @@ public class SupportProgramPageService {
         "특허 등록 누적 수",
         "NTIS 수행건수",
         "지원 횟수",
-        "사업명",
         "누적 지원금",
-        "지원연도",
         "부채 비율",
         "매출 성장성"
     };
@@ -70,20 +63,17 @@ public class SupportProgramPageService {
     };
     private static final String COMPANY_TEMPLATE_PATH = "templates/company-info-template.xlsx";
 
-    private final JdbcTemplate jdbcTemplate;
     private final BtpSupportProgramRepository supportProgramRepository;
     private final OpenAiSupportProgramAnalysisClient analysisClient;
-    private final KodataExcelImportService kodataExcelImportService;
+    private final CompanyTemplateImportService companyTemplateImportService;
 
     public SupportProgramPageService(
-            JdbcTemplate jdbcTemplate,
             BtpSupportProgramRepository supportProgramRepository,
             OpenAiSupportProgramAnalysisClient analysisClient,
-            KodataExcelImportService kodataExcelImportService) {
-        this.jdbcTemplate = jdbcTemplate;
+            CompanyTemplateImportService companyTemplateImportService) {
         this.supportProgramRepository = supportProgramRepository;
         this.analysisClient = analysisClient;
-        this.kodataExcelImportService = kodataExcelImportService;
+        this.companyTemplateImportService = companyTemplateImportService;
     }
 
     public ApiDataResponse<SupportProgramSearchResponse> search(String keyword) {
@@ -94,21 +84,16 @@ public class SupportProgramPageService {
         return new ApiDataResponse<>(new SupportProgramSearchResponse(items));
     }
 
-    public ApiDataResponse<SupportProgramCompanyListResponse> companies(Long supportProgramId) {
-        BtpSupportProgram supportProgram = supportProgram(supportProgramId);
-        List<SupportProgramCompanyItem> items = supportProgramRepository
-                .findCompaniesForProgram(
-                        supportProgram.getCode(),
-                        supportProgram.getProgramYear(),
-                        supportProgram.getBudgetProgramName())
+    public ApiDataResponse<SupportProgramCompanyListResponse> companies(String supportProgramCode) {
+        List<SupportProgramCompanyItem> items = companyProjections(supportProgramCode)
                 .stream()
                 .map(this::mapCompanyItem)
                 .toList();
         return new ApiDataResponse<>(new SupportProgramCompanyListResponse(items));
     }
 
-    public byte[] companyListExcel(Long supportProgramId) {
-        List<SupportProgramCompanyItem> items = companies(supportProgramId).data().items();
+    public byte[] companyListExcel(String supportProgramCode) {
+        List<SupportProgramCompanyProjection> items = companyProjections(supportProgramCode);
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("사업별 기업 목록");
             CellStyle headerStyle = workbook.createCellStyle();
@@ -122,24 +107,21 @@ public class SupportProgramPageService {
                 cell.setCellStyle(headerStyle);
             }
             int rowIndex = 1;
-            for (SupportProgramCompanyItem item : items) {
+            for (SupportProgramCompanyProjection item : items) {
                 Row row = sheet.createRow(rowIndex++);
-                write(row, 0, item.companyName());
-                write(row, 1, item.businessRegistrationNumberMasked() == null ? item.companyId() : item.businessRegistrationNumberMasked());
-                write(row, 2, item.region());
-                write(row, 3, item.establishedYear());
-                write(row, 4, item.industryName());
-                write(row, 5, item.mainProduct());
-                write(row, 6, item.latestSalesAmount() == null ? null : item.latestSalesAmount().value());
-                write(row, 7, item.employeeCount() == null ? null : item.employeeCount().value());
-                write(row, 8, item.registeredPatentCount());
-                write(row, 9, item.ntisProjectCount());
-                write(row, 10, item.supportCount());
-                write(row, 11, item.programName());
-                write(row, 12, item.cumulativeSupportAmount() == null ? null : item.cumulativeSupportAmount().value());
-                write(row, 13, joinYears(item.supportYears()));
-                write(row, 14, item.debtRatio());
-                write(row, 15, item.salesGrowthRate());
+                write(row, 0, item.getCompanyName());
+                write(row, 1, item.getRegionName());
+                write(row, 2, item.getEstablishedYear());
+                write(row, 3, item.getIndustryName());
+                write(row, 4, item.getMainProduct());
+                write(row, 5, item.getLatestSalesAmount());
+                write(row, 6, item.getEmployeeCount());
+                write(row, 7, item.getRegisteredPatentCount());
+                write(row, 8, item.getNtisProjectCount());
+                write(row, 9, item.getSupportCount());
+                write(row, 10, item.getCumulativeSupportAmount());
+                write(row, 11, round(item.getDebtRatio()));
+                write(row, 12, round(item.getSalesGrowthRate()));
             }
             for (int index = 0; index < COMPANY_LIST_HEADERS.length; index++) {
                 sheet.autoSizeColumn(index);
@@ -203,22 +185,15 @@ public class SupportProgramPageService {
                             limit(request.programSummary(), 1000));
         }
         BtpSupportProgram savedProgram = supportProgramRepository.save(supportProgram);
-        return new ApiDataResponse<>(new SupportProgramSaveResponse(savedProgram.getSupportProgramId(), !exists));
+        return new ApiDataResponse<>(new SupportProgramSaveResponse(savedProgram.getCode(), !exists));
     }
 
     public ApiDataResponse<CompanyTemplateImportResponse> importCompanyTemplate(MultipartFile file) {
-        int existingCompanies = countCompanies();
-        int dataRows = countTemplateRows(file);
-        var result = kodataExcelImportService.importFile(file);
-        int currentCompanies = countCompanies();
-        int createdCompanies = Math.max(0, currentCompanies - existingCompanies);
-        int updatedCompanies = Math.max(0, dataRows - createdCompanies);
-        return new ApiDataResponse<>(new CompanyTemplateImportResponse(dataRows, createdCompanies, updatedCompanies, List.of()));
+        return new ApiDataResponse<>(companyTemplateImportService.importFile(file));
     }
 
     private SupportProgramSearchItem mapSearchItem(BtpSupportProgram program) {
         return new SupportProgramSearchItem(
-                program.getSupportProgramId(),
                 program.getCode(),
                 program.getProgramYear(),
                 program.getBudgetProgramName(),
@@ -229,60 +204,37 @@ public class SupportProgramPageService {
                 program.getLocalGovernmentName());
     }
 
+    private List<SupportProgramCompanyProjection> companyProjections(String supportProgramCode) {
+        BtpSupportProgram supportProgram = supportProgram(supportProgramCode);
+        return supportProgramRepository.findCompaniesForProgram(
+                supportProgram.getCode(),
+                supportProgram.getProgramYear(),
+                supportProgram.getBudgetProgramName());
+    }
+
     private SupportProgramCompanyItem mapCompanyItem(SupportProgramCompanyProjection projection) {
         return new SupportProgramCompanyItem(
                 projection.getCompanyId(),
                 projection.getCompanyName(),
-                maskBusinessRegistrationNumber(projection.getBusinessRegistrationNumber()),
                 projection.getRegionName(),
                 projection.getEstablishedYear(),
                 projection.getIndustryName(),
                 projection.getMainProduct(),
                 new YearlyMoneyAmount(projection.getLatestSalesAmount(), KRW_THOUSAND, projection.getLatestSalesYear()),
-                new YearlyCount(projection.getEmployeeCount(), projection.getEmployeeYear()),
+                projection.getEmployeeCount(),
                 projection.getRegisteredPatentCount(),
                 projection.getNtisProjectCount(),
                 projection.getSupportCount(),
-                projection.getProgramName(),
                 new MoneyAmount(projection.getCumulativeSupportAmount(), KRW_THOUSAND),
-                parseYears(projection.getSupportYears()),
                 round(projection.getDebtRatio()),
                 round(projection.getSalesGrowthRate()));
     }
 
-    private BtpSupportProgram supportProgram(Long supportProgramId) {
+    private BtpSupportProgram supportProgram(String supportProgramCode) {
+        String normalizedCode = supportProgramCode == null ? "" : supportProgramCode.trim();
         return supportProgramRepository
-                .findById(supportProgramId)
-                .orElseThrow(() -> new IllegalArgumentException("지원 사업을 찾을 수 없습니다. supportProgramId=" + supportProgramId));
-    }
-
-    private int countCompanies() {
-        Integer count = jdbcTemplate.queryForObject("select count(*) from company", Integer.class);
-        return count == null ? 0 : count;
-    }
-
-    private int countTemplateRows(MultipartFile file) {
-        try (InputStream inputStream = file.getInputStream(); Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getSheet("1__기업정보");
-            if (sheet == null) {
-                sheet = workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
-            }
-            if (sheet == null) {
-                return 0;
-            }
-            int count = 0;
-            for (Row row : sheet) {
-                if (row.getRowNum() < 5) {
-                    continue;
-                }
-                if (ExcelImportSupport.integer(row, 0) != null) {
-                    count++;
-                }
-            }
-            return count;
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("기업정보 Excel 템플릿을 읽을 수 없습니다.", exception);
-        }
+                .findFirstByCodeOrderByProgramYearDescSupportProgramIdDesc(normalizedCode)
+                .orElseThrow(() -> new IllegalArgumentException("지원 사업을 찾을 수 없습니다. supportProgramCode=" + supportProgramCode));
     }
 
     private byte[] fallbackCompanyTemplate() {
@@ -333,35 +285,6 @@ public class SupportProgramPageService {
 
     private Double round(Double value) {
         return value == null ? null : Math.round(value * 100.0) / 100.0;
-    }
-
-    private List<Integer> parseYears(String years) {
-        if (years == null || years.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(years.split(","))
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .map(Integer::valueOf)
-                .toList();
-    }
-
-    private String joinYears(List<Integer> years) {
-        if (years == null || years.isEmpty()) {
-            return "";
-        }
-        return String.join(", ", years.stream().map(String::valueOf).toList());
-    }
-
-    private String maskBusinessRegistrationNumber(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String digits = value.replaceAll("[^0-9]", "");
-        if (digits.length() < 10) {
-            return value;
-        }
-        return digits.substring(0, 3) + "-" + digits.substring(3, 5) + "-*****";
     }
 
     private void write(Row row, int index, Object value) {
