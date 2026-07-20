@@ -48,17 +48,17 @@ public class SupportProgramPageService {
     private static final DateTimeFormatter COMPACT_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String[] COMPANY_LIST_HEADERS = {
-        "기업명",
+        "기업일련번호",
         "지역",
-        "설립연도",
+        "설립일자",
         "업종",
         "주요제품",
-        "최근 매출",
+        "최근 매출(천원)",
         "종업원 수",
-        "특허 등록 누적 수",
+        "지적재산권",
         "NTIS 수행건수",
         "지원 횟수",
-        "누적 지원금",
+        "누적 지원금(천원)",
         "부채 비율",
         "매출 성장성"
     };
@@ -125,7 +125,7 @@ public class SupportProgramPageService {
             int rowIndex = 1;
             for (SupportProgramCompanyProjection item : items) {
                 Row row = sheet.createRow(rowIndex++);
-                write(row, 0, item.getCompanyName());
+                write(row, 0, item.getCompanyId());
                 write(row, 1, item.getRegionName());
                 write(row, 2, item.getEstablishedYear());
                 write(row, 3, item.getIndustryName());
