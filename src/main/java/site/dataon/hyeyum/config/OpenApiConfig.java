@@ -40,6 +40,14 @@ public class OpenApiConfig {
     }
 
     @Bean
+    public GroupedOpenApi companyDashboardApi() {
+        return GroupedOpenApi.builder()
+                .group("company-dashboard")
+                .pathsToMatch("/companies/**")
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi adminImportsApi() {
         return GroupedOpenApi.builder()
                 .group("admin-imports")

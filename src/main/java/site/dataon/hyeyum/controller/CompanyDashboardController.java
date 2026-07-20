@@ -2,6 +2,8 @@ package site.dataon.hyeyum.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -41,8 +43,12 @@ public class CompanyDashboardController {
         this.companyDashboardService = companyDashboardService;
     }
 
-    @GetMapping("/profile")
-    @Operation(summary = "기업 정보")
+@GetMapping("/profile")
+    @Operation(summary = "기업 정보", description = "기업일련번호(companyId)를 기준으로 기업 기본 정보와 업력 계산값을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "기업 정보 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<CompanyProfileResponse> profile(
             @Parameter(description = "기업일련번호", example = "117")
                     @PathVariable("companyId")
@@ -52,84 +58,138 @@ public class CompanyDashboardController {
     }
 
     @GetMapping("/financial-position")
-    @Operation(summary = "재무 주요 지표")
+    @Operation(summary = "재무 주요 지표", description = "연도별 자산, 부채, 자본, 납입자본금과 부채비율을 천원 단위로 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "재무 주요 지표 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<FinancialPositionResponse> financialPosition(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.financialPosition(companyId);
     }
 
     @GetMapping("/income-statements")
-    @Operation(summary = "손익 주요 지표")
+    @Operation(summary = "손익 주요 지표", description = "연도별 매출, 매출원가, 영업이익, 당기순이익, 영업이익률과 전년 대비 매출 증가율을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "손익 주요 지표 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<IncomeStatementsResponse> incomeStatements(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.incomeStatements(companyId);
     }
 
     @GetMapping("/employments")
-    @Operation(summary = "고용 정보")
+    @Operation(summary = "고용 정보", description = "연도별 종업원 수, 국민연금 가입/취업/퇴직자 수, 평균 급여와 고용 증감률을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "고용 정보 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<EmploymentsResponse> employments(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.employments(companyId);
     }
 
     @GetMapping("/certifications-ip-summary")
-    @Operation(summary = "인증·지식재산권 요약")
+    @Operation(summary = "인증·지식재산권 요약", description = "활성 등록 특허 수, 인증 배지, 연구조직 보유 여부와 등록일을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "인증·지식재산권 요약 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<CertificationsIpSummaryResponse> certificationsIpSummary(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.certificationsIpSummary(companyId);
     }
 
     @GetMapping("/patents")
-    @Operation(summary = "특허 상세 모달")
+    @Operation(summary = "특허 상세 모달", description = "특허 현황 클릭 시 표시할 기업별 특허/실용신안 상세 목록을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "특허 상세 목록 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<PatentListResponse> patents(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.patents(companyId);
     }
 
     @GetMapping("/productive-activities/summary")
-    @Operation(summary = "생산적 활동 이력 요약")
+    @Operation(summary = "생산적 활동 이력 요약", description = "NTIS 참여 요약, 최근 5개년 정부 연구비 합계, 지원 이력 요약을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "생산적 활동 이력 요약 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<ProductiveActivitiesSummaryResponse> productiveActivitiesSummary(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.productiveActivitiesSummary(companyId);
     }
 
     @GetMapping("/ntis/lead-projects")
-    @Operation(summary = "NTIS 주관 과제 모달")
+    @Operation(summary = "NTIS 주관 과제 모달", description = "기업이 주관한 NTIS 과제 목록과 연구 기간, 연구비 정보를 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "NTIS 주관 과제 목록 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<NtisLeadProjectListResponse> ntisLeadProjects(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.ntisLeadProjects(companyId);
     }
 
     @GetMapping("/ntis/collaborative-projects")
-    @Operation(summary = "NTIS 위탁/공동 과제 모달")
+    @Operation(summary = "NTIS 위탁/공동 과제 모달", description = "기업이 위탁/공동 형태로 참여한 NTIS 과제 목록과 공동연구 정보를 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "NTIS 위탁/공동 과제 목록 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<NtisCollaborativeProjectListResponse> ntisCollaborativeProjects(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.ntisCollaborativeProjects(companyId);
     }
 
     @GetMapping("/computed-metrics")
-    @Operation(summary = "계산 지표")
+    @Operation(summary = "계산 지표", description = "부채비율, 매출원가율, 매출/고용 성장성, 정부 R&D 의존도 등 저장된 계산 지표를 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "계산 지표 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<ComputedMetricsResponse> computedMetrics(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.computedMetrics(companyId);
     }
 
     @GetMapping("/growth-scenario")
-    @Operation(summary = "기업 성장 시나리오")
+    @Operation(
+            summary = "기업 성장 시나리오",
+            description = "2021년 기준 기업 매출 성장지수와 한국은행 동일 업종 성장지수를 반환한다. 2025년 기업 참고 경로는 업종 성장률에 최근 2개년 업종 대비 초과/부족 성장 중앙값을 더해 산출한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "기업 성장 시나리오 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<GrowthScenarioResponse> growthScenario(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.growthScenario(companyId);
     }
 
     @GetMapping("/support-duplication-review")
-    @Operation(summary = "중복지원 검토")
+    @Operation(summary = "중복지원 검토", description = "기업의 지원 이력을 반환하고, 동일 사업명·지원품목 기준의 잠재 중복 후보를 함께 제공한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "중복지원 검토 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<SupportDuplicationReviewResponse> supportDuplicationReview(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.supportDuplicationReview(companyId);
     }
 
     @GetMapping("/ai-summary")
-    @Operation(summary = "AI 3줄 요약")
+    @Operation(summary = "AI 3줄 요약", description = "company.ai_summary에 저장된 기업 3줄 요약을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "AI 3줄 요약 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<AiSummaryResponse> aiSummary(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.aiSummary(companyId);
     }
 
     @GetMapping("/news")
-    @Operation(summary = "기업별 최신 뉴스")
+    @Operation(summary = "기업별 최신 뉴스", description = "기업명을 검색어로 Google News RSS를 조회한다. 기업명이 없으면 MISSING_COMPANY_NAME 상태를 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "기업 뉴스 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
     public ApiDataResponse<NewsResponse> news(
             @PathVariable("companyId") @NotNull Integer companyId,
             @RequestParam(defaultValue = "3") @Min(1) @Max(10) Integer limit) {
