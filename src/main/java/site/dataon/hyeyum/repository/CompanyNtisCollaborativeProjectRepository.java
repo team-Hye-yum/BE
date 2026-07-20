@@ -8,4 +8,6 @@ public interface CompanyNtisCollaborativeProjectRepository extends JpaRepository
 
     List<CompanyNtisCollaborativeProject> findByCompanyIdOrderByReferenceYearDescReferenceDateDescNtisCollaborativeProjectIdAsc(
             Integer companyId);
+
+    int countByCompanyId(Integer companyId);
 }
