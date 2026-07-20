@@ -19,6 +19,13 @@ public class GlobalExceptionHandler {
         return problemDetail;
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgumentException(IllegalArgumentException exception) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+        problemDetail.setTitle("Bad request");
+        return problemDetail;
+    }
+
     private HttpStatus resolveStatus(OpenAiApiException exception) {
         if ("insufficient_quota".equals(exception.getCode())) {
             return HttpStatus.BAD_GATEWAY;

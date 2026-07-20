@@ -73,4 +73,48 @@ public class BtpSupportProgram {
     @Comment("기업 마당 공고문 정보//PDF 링크들을 담을 예정")
     @Column(name = "announcement_url", length = 20)
     private String announcementUrl;
+
+    public static BtpSupportProgram create(
+            String code,
+            Integer programYear,
+            String budgetProgramName,
+            String programCategory,
+            String supportType,
+            LocalDate startDate,
+            LocalDate endDate,
+            String departmentName,
+            String localGovernmentName,
+            String programSummary) {
+        BtpSupportProgram program = new BtpSupportProgram();
+        program.code = code;
+        program.programYear = programYear;
+        program.budgetProgramName = budgetProgramName;
+        program.programCategory = programCategory;
+        program.supportType = supportType;
+        program.startDate = startDate;
+        program.endDate = endDate;
+        program.departmentName = departmentName;
+        program.localGovernmentName = localGovernmentName;
+        program.programSummary = programSummary;
+        return program;
+    }
+
+    public void update(
+            String budgetProgramName,
+            String programCategory,
+            String supportType,
+            LocalDate startDate,
+            LocalDate endDate,
+            String departmentName,
+            String localGovernmentName,
+            String programSummary) {
+        this.budgetProgramName = budgetProgramName;
+        this.programCategory = programCategory;
+        this.supportType = supportType;
+        this.startDate = startDate;
+        this.endDate = endDate;
+        this.departmentName = departmentName;
+        this.localGovernmentName = localGovernmentName;
+        this.programSummary = programSummary;
+    }
 }
