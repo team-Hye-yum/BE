@@ -10,4 +10,6 @@ public interface CompanyNtisCollaborativeProjectRepository extends JpaRepository
             Integer companyId);
 
     int countByCompanyId(Integer companyId);
+
+    int countByCompanyIdAndReferenceYear(Integer companyId, Integer referenceYear);
 }

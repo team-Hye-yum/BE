@@ -9,4 +9,6 @@ public interface CompanyNtisLeadProjectRepository extends JpaRepository<CompanyN
     List<CompanyNtisLeadProject> findByCompanyIdOrderByReferenceYearDescReferenceDateDescNtisLeadProjectIdAsc(Integer companyId);
 
     int countByCompanyId(Integer companyId);
+
+    int countByCompanyIdAndReferenceYear(Integer companyId, Integer referenceYear);
 }
