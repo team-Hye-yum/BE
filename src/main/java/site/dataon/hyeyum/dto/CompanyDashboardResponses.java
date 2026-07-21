@@ -141,19 +141,36 @@ public final class CompanyDashboardResponses {
     public record ComputedMetricItem(String code, String label, Double value, String unit) {}
 
     public record GrowthScenarioResponse(
-            Integer companyId, String disclaimer, List<GrowthChartLine> chartLines, List<SupportMarker> supportMarkers) {}
+            Integer companyId,
+            List<GrowthChartLine> chartLines,
+            List<SupportMarker> supportMarkers,
+            ObservedFlow observedFlow) {}
 
-    public record GrowthChartLine(String code, String label, List<GrowthPoint> points) {}
+    public record GrowthChartLine(String code, List<GrowthPoint> points) {}
 
-    public record GrowthPoint(Integer year, Integer value, Double index, String type) {}
+    public record GrowthPoint(Integer year, Double index) {}
 
     public record SupportMarker(
             Long supportHistoryId,
             String programName,
-            String supportItem,
+            String programType,
             String startDate,
             String endDate,
-            Integer supportYear) {}
+            Integer supportAmount,
+            MetricsAtMarker metricsAtMarker) {}
+
+    public record MetricsAtMarker(
+            Integer researchAndDevelopmentExpense,
+            Double operatingProfitMargin,
+            Integer employeeCount) {}
+
+    public record ObservedFlow(List<ObservedFlowPeriod> periods, List<ObservedFlowRow> rows) {}
+
+    public record ObservedFlowPeriod(Integer fromYear, Integer toYear) {}
+
+    public record ObservedFlowRow(String code, List<ObservedFlowDirection> directions) {}
+
+    public record ObservedFlowDirection(Integer fromYear, Integer toYear, String direction) {}
 
     public record AiSummaryResponse(String aiSummary) {}
 

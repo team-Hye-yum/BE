@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
@@ -44,12 +43,17 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.GrowthScenarioResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementDerived;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementPoint;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementsResponse;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.MetricsAtMarker;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.MoneyValue;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProjectItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisSummary;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ObservedFlow;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ObservedFlowDirection;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ObservedFlowPeriod;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ObservedFlowRow;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ProductiveActivitiesSummaryResponse;
@@ -76,6 +80,9 @@ public class CompanyDashboardService {
     private static final String REVENUE_INDEX = "REVENUE_INDEX";
     private static final String REVENUE_GROWTH_RATE = "REVENUE_GROWTH_RATE";
     private static final Integer BASE_YEAR = 2021;
+    private static final Integer LAST_OBSERVED_YEAR = 2024;
+    private static final Integer REFERENCE_YEAR = 2025;
+    private static final Double STABILITY_SCALE_C = 40.0;
     private static final String DISCLAIMER =
             "지원사업이 기업 성장의 원인임을 의미하지 않으며, 성장 흐름을 참고하기 위한 정보입니다. 2025년은 한국은행 발표 자료를 기반으로 산출한 참고 경로이며 기업의 미래를 예측하지 않습니다.";
 
@@ -354,31 +361,40 @@ public class CompanyDashboardService {
         findCompany(companyId);
         List<CompanyFinancialStatistics> financials = financialStatisticsRepository.findByCompanyIdOrderByYearAsc(companyId);
         Map<Integer, Integer> salesByYear = new HashMap<>();
+        Map<Integer, CompanyFinancialStatistics> financialsByYear = new HashMap<>();
         financials.stream()
                 .filter(stat -> stat.getYear() != null)
-                .forEach(stat -> salesByYear.put(stat.getYear(), stat.getSalesAmount()));
+                .forEach(stat -> {
+                    salesByYear.put(stat.getYear(), stat.getSalesAmount());
+                    financialsByYear.put(stat.getYear(), stat);
+                });
+        Map<Integer, Integer> employeesByYear = new HashMap<>();
+        employmentStatisticsRepository.findByCompanyIdOrderByYearAsc(companyId).stream()
+                .filter(stat -> stat.getYear() != null)
+                .forEach(stat -> employeesByYear.put(stat.getYear(), stat.getEmployeeCount()));
         String bokIndustryCode = benchmarkMappingRepository
                 .findById(companyId)
                 .map(CompanyIndustryBenchmarkMapping::getBokIndustryCode)
                 .orElse(null);
-        List<GrowthPoint> companyPoints = companyGrowthPoints(salesByYear, bokIndustryCode);
-        List<GrowthPoint> industryPoints = industryGrowthPoints(bokIndustryCode);
+        Map<Integer, Double> companyIndexes = companyIndexByYear(salesByYear);
+        Map<Integer, Double> companyGrowthRates = companyGrowthRateByYear(salesByYear);
+        Map<Integer, Double> industryGrowthRates = industryGrowthRateByYear(bokIndustryCode);
+        Map<Integer, Double> industryIndexes = industryIndexByYear(industryGrowthRates);
+
+        Double industryReferenceGrowthRate2025 = industryReferenceGrowthRate2025(industryGrowthRates);
+        Double industryReferenceIndex2025 = referenceIndex(industryIndexes.get(LAST_OBSERVED_YEAR), industryReferenceGrowthRate2025);
+        Double firmReferenceGrowthRate2025 = industryReferenceGrowthRate2025 == null
+                ? null
+                : industryReferenceGrowthRate2025 + weightedCorrection(companyGrowthRates, industryGrowthRates);
+        Double firmReferenceIndex2025 = referenceIndex(companyIndexes.get(LAST_OBSERVED_YEAR), firmReferenceGrowthRate2025);
         List<SupportMarker> markers = supportHistoryRepository.findByCompanyIdOrderBySupportYearAscSupportHistoryIdAsc(companyId).stream()
-                .map(history -> new SupportMarker(
-                        history.getSupportHistoryId(),
-                        history.getBudgetProgramName(),
-                        history.getSupportItem(),
-                        formatDate(history.getStartDate()),
-                        formatDate(history.getEndDate()),
-                        history.getSupportYear()))
+                .map(history -> supportMarker(history, financialsByYear, employeesByYear))
                 .toList();
         return new ApiDataResponse<>(new GrowthScenarioResponse(
                 companyId,
-                DISCLAIMER,
-                List.of(
-                        new GrowthChartLine("COMPANY", "기업 성장 경로", companyPoints),
-                        new GrowthChartLine("INDUSTRY", "동일 업종 평균 성장 경로", industryPoints)),
-                markers));
+                chartLines(companyIndexes, firmReferenceIndex2025, industryIndexes, industryReferenceIndex2025),
+                markers,
+                observedFlow(financialsByYear, employeesByYear)));
     }
 
     @Transactional(readOnly = true)
@@ -392,75 +408,58 @@ public class CompanyDashboardService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기업 정보를 찾을 수 없습니다."));
     }
 
-    private List<GrowthPoint> companyGrowthPoints(Map<Integer, Integer> salesByYear, String bokIndustryCode) {
+    private List<GrowthChartLine> chartLines(
+            Map<Integer, Double> companyIndexes,
+            Double firmReferenceIndex2025,
+            Map<Integer, Double> industryIndexes,
+            Double industryReferenceIndex2025) {
+        List<GrowthChartLine> lines = new ArrayList<>();
+        lines.add(new GrowthChartLine("COMPANY_ACTUAL", actualPoints(companyIndexes)));
+        if (companyIndexes.get(LAST_OBSERVED_YEAR) != null && firmReferenceIndex2025 != null) {
+            lines.add(new GrowthChartLine(
+                    "COMPANY_REFERENCE",
+                    List.of(
+                            new GrowthPoint(LAST_OBSERVED_YEAR, companyIndexes.get(LAST_OBSERVED_YEAR)),
+                            new GrowthPoint(REFERENCE_YEAR, firmReferenceIndex2025))));
+        }
+        if (!industryIndexes.isEmpty()) {
+            lines.add(new GrowthChartLine("INDUSTRY_ACTUAL", actualPoints(industryIndexes)));
+        }
+        if (industryIndexes.get(LAST_OBSERVED_YEAR) != null && industryReferenceIndex2025 != null) {
+            lines.add(new GrowthChartLine(
+                    "INDUSTRY_REFERENCE",
+                    List.of(
+                            new GrowthPoint(LAST_OBSERVED_YEAR, industryIndexes.get(LAST_OBSERVED_YEAR)),
+                            new GrowthPoint(REFERENCE_YEAR, industryReferenceIndex2025))));
+        }
+        return lines;
+    }
+
+    private Map<Integer, Double> companyIndexByYear(Map<Integer, Integer> salesByYear) {
         Integer baseSales = salesByYear.get(BASE_YEAR);
-        List<GrowthPoint> points = salesByYear.entrySet().stream()
-                .filter(entry -> entry.getKey() >= BASE_YEAR)
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> new GrowthPoint(
-                        entry.getKey(),
-                        entry.getValue(),
-                        baseSales == null || baseSales == 0 || entry.getValue() == null
-                                ? null
-                                : round(entry.getValue() * 100.0 / baseSales),
-                        "ACTUAL"))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        Integer latestYear = salesByYear.keySet().stream().filter(year -> year >= BASE_YEAR).max(Integer::compareTo).orElse(null);
-        if (latestYear != null) {
-            Integer nextYear = latestYear + 1;
-            Double predictedGrowth = predictedGrowthRate(salesByYear, bokIndustryCode, nextYear);
-            Double latestIndex = points.stream()
-                    .filter(point -> Objects.equals(point.year(), latestYear))
-                    .map(GrowthPoint::index)
-                    .findFirst()
-                    .orElse(null);
-            if (predictedGrowth != null && latestIndex != null) {
-                points.add(new GrowthPoint(nextYear, null, round(latestIndex * (1 + predictedGrowth / 100.0)), "REFERENCE_PATH"));
-            }
+        Map<Integer, Double> indexes = new HashMap<>();
+        for (int year = BASE_YEAR; year <= LAST_OBSERVED_YEAR; year++) {
+            Integer sales = salesByYear.get(year);
+            indexes.put(year, baseSales == null || baseSales == 0 || sales == null
+                    ? null
+                    : round(sales * 100.0 / baseSales));
         }
-        return points;
+        return indexes;
     }
 
-    private List<GrowthPoint> industryGrowthPoints(String bokIndustryCode) {
-        if (bokIndustryCode == null || bokIndustryCode.isBlank()) {
-            return List.of();
+    private Map<Integer, Double> companyGrowthRateByYear(Map<Integer, Integer> salesByYear) {
+        Map<Integer, Double> rates = new HashMap<>();
+        for (int year = BASE_YEAR + 1; year <= LAST_OBSERVED_YEAR; year++) {
+            rates.put(year, growthPercent(salesByYear.get(year - 1), salesByYear.get(year)));
         }
-        return benchmarkIndexRepository
-                .findByBokIndustryCodeAndMetricAndBaseYearOrderByYearAsc(bokIndustryCode, REVENUE_INDEX, BASE_YEAR)
-                .stream()
-                .map(index -> new GrowthPoint(
-                        index.getYear(),
-                        null,
-                        index.getIndexValue() == null ? null : round(index.getIndexValue().doubleValue()),
-                        index.getYear() != null && index.getYear() > 2024 ? "REFERENCE_PATH" : "ACTUAL"))
-                .toList();
-    }
-
-    private Double predictedGrowthRate(Map<Integer, Integer> salesByYear, String bokIndustryCode, Integer targetYear) {
-        if (bokIndustryCode == null || targetYear == null) {
-            return null;
-        }
-        Map<Integer, Double> industryGrowthRates = industryGrowthRateByYear(bokIndustryCode);
-        Double targetIndustryGrowthRate = industryGrowthRates.get(targetYear);
-        if (targetIndustryGrowthRate == null) {
-            return null;
-        }
-        List<Double> excessRates = List.of(targetYear - 2, targetYear - 1).stream()
-                .map(year -> {
-                    Double companyGrowthRate = growthPercent(salesByYear.get(year - 1), salesByYear.get(year));
-                    Double industryGrowthRate = industryGrowthRates.get(year);
-                    return companyGrowthRate == null || industryGrowthRate == null ? null : companyGrowthRate - industryGrowthRate;
-                })
-                .filter(Objects::nonNull)
-                .sorted()
-                .toList();
-        Double structuralExcessRate = median(excessRates);
-        return structuralExcessRate == null ? targetIndustryGrowthRate : targetIndustryGrowthRate + structuralExcessRate;
+        return rates;
     }
 
     private Map<Integer, Double> industryGrowthRateByYear(String bokIndustryCode) {
         Map<Integer, Double> rates = new HashMap<>();
+        if (bokIndustryCode == null || bokIndustryCode.isBlank()) {
+            return rates;
+        }
         benchmarkMetricRepository.findByBokIndustryCodeAndMetricOrderByYearAsc(bokIndustryCode, REVENUE_GROWTH_RATE).stream()
                 .filter(metric -> metric.getYear() != null)
                 .forEach(metric -> rates.put(
@@ -468,6 +467,139 @@ public class CompanyDashboardService {
         return rates;
     }
 
+    private Map<Integer, Double> industryIndexByYear(Map<Integer, Double> industryGrowthRates) {
+        Map<Integer, Double> indexes = new HashMap<>();
+        if (industryGrowthRates.isEmpty()) {
+            return indexes;
+        }
+        indexes.put(BASE_YEAR, 100.0);
+        for (int year = BASE_YEAR + 1; year <= LAST_OBSERVED_YEAR; year++) {
+            Double previousIndex = indexes.get(year - 1);
+            Double growthRate = industryGrowthRates.get(year);
+            indexes.put(year, previousIndex == null || growthRate == null
+                    ? null
+                    : round(previousIndex * (1 + growthRate / 100.0)));
+        }
+        return indexes;
+    }
+
+    private List<GrowthPoint> actualPoints(Map<Integer, Double> indexes) {
+        return List.of(BASE_YEAR, 2022, 2023, LAST_OBSERVED_YEAR).stream()
+                .map(year -> new GrowthPoint(year, indexes.get(year)))
+                .toList();
+    }
+
+    private Double industryReferenceGrowthRate2025(Map<Integer, Double> industryGrowthRates) {
+        List<Double> rates = List.of(2022, 2023, LAST_OBSERVED_YEAR).stream()
+                .map(industryGrowthRates::get)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
+        return rates.size() < 3 ? null : median(rates);
+    }
+
+    private Double weightedCorrection(Map<Integer, Double> companyGrowthRates, Map<Integer, Double> industryGrowthRates) {
+        Double gap2023 = industryGap(2023, companyGrowthRates, industryGrowthRates);
+        Double gap2024 = industryGap(LAST_OBSERVED_YEAR, companyGrowthRates, industryGrowthRates);
+        if (gap2023 == null || gap2024 == null) {
+            return 0.0;
+        }
+        Double industryGapAverage = (gap2023 + gap2024) / 2.0;
+        Double spread = Math.abs(gap2023 - gap2024);
+        Double z = 1 / (1 + Math.pow(spread / STABILITY_SCALE_C, 2));
+        return z * industryGapAverage;
+    }
+
+    private Double industryGap(Integer year, Map<Integer, Double> companyGrowthRates, Map<Integer, Double> industryGrowthRates) {
+        Double companyGrowthRate = companyGrowthRates.get(year);
+        Double industryGrowthRate = industryGrowthRates.get(year);
+        return companyGrowthRate == null || industryGrowthRate == null ? null : companyGrowthRate - industryGrowthRate;
+    }
+
+    private Double referenceIndex(Double baseIndex, Double growthRate) {
+        return baseIndex == null || growthRate == null ? null : round(baseIndex * (1 + growthRate / 100.0));
+    }
+
+    private SupportMarker supportMarker(
+            BtpSupportHistory history,
+            Map<Integer, CompanyFinancialStatistics> financialsByYear,
+            Map<Integer, Integer> employeesByYear) {
+        Integer markerYear = markerYear(history);
+        CompanyFinancialStatistics markerFinancial = markerYear == null ? null : financialsByYear.get(markerYear);
+        return new SupportMarker(
+                history.getSupportHistoryId(),
+                history.getBudgetProgramName(),
+                history.getSupportType(),
+                formatDate(history.getStartDate()),
+                formatDate(history.getEndDate()),
+                history.getSupportAmount(),
+                new MetricsAtMarker(
+                        markerFinancial == null ? null : markerFinancial.getResearchAndDevelopmentExpense(),
+                        markerFinancial == null ? null : round(markerFinancial.getOperatingMargin()),
+                        markerYear == null ? null : employeesByYear.get(markerYear)));
+    }
+
+    private Integer markerYear(BtpSupportHistory history) {
+        if (history.getStartDate() != null) {
+            return history.getStartDate().getYear();
+        }
+        return history.getSupportYear();
+    }
+
+    private ObservedFlow observedFlow(
+            Map<Integer, CompanyFinancialStatistics> financialsByYear,
+            Map<Integer, Integer> employeesByYear) {
+        List<ObservedFlowPeriod> periods = List.of(
+                new ObservedFlowPeriod(2021, 2022),
+                new ObservedFlowPeriod(2022, 2023),
+                new ObservedFlowPeriod(2023, LAST_OBSERVED_YEAR));
+        return new ObservedFlow(
+                periods,
+                List.of(
+                        observedFlowRow(
+                                "RND_EXPENSE",
+                                periods,
+                                year -> {
+                                    CompanyFinancialStatistics stat = financialsByYear.get(year);
+                                    return stat == null ? null : stat.getResearchAndDevelopmentExpense();
+                                }),
+                        observedFlowRow(
+                                "OPERATING_PROFIT_MARGIN",
+                                periods,
+                                year -> {
+                                    CompanyFinancialStatistics stat = financialsByYear.get(year);
+                                    return stat == null ? null : stat.getOperatingMargin();
+                                }),
+                        observedFlowRow("EMPLOYEE_COUNT", periods, employeesByYear::get)));
+    }
+
+    private ObservedFlowRow observedFlowRow(
+            String code,
+            List<ObservedFlowPeriod> periods,
+            java.util.function.Function<Integer, Number> valueByYear) {
+        return new ObservedFlowRow(
+                code,
+                periods.stream()
+                        .map(period -> new ObservedFlowDirection(
+                                period.fromYear(),
+                                period.toYear(),
+                                direction(valueByYear.apply(period.fromYear()), valueByYear.apply(period.toYear()))))
+                        .toList());
+    }
+
+    private String direction(Number fromValue, Number toValue) {
+        if (fromValue == null || toValue == null) {
+            return "NO_DATA";
+        }
+        int comparison = Double.compare(toValue.doubleValue(), fromValue.doubleValue());
+        if (comparison > 0) {
+            return "UP";
+        }
+        if (comparison < 0) {
+            return "DOWN";
+        }
+        return "FLAT";
+    }
     private ComputedMetricItem metric(String code, String label, Double value, String unit) {
         return new ComputedMetricItem(code, label, round(value), unit);
     }
