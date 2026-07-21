@@ -1,6 +1,5 @@
 package site.dataon.hyeyum.dto;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 
 public final class CompanyDashboardResponses {
@@ -150,10 +149,6 @@ public final class CompanyDashboardResponses {
             Integer supportYear) {}
 
     public record AiSummaryResponse(String aiSummary) {}
-
-    public record NewsResponse(Integer companyId, String companyName, String status, List<NewsItem> items) {}
-
-    public record NewsItem(String title, String publisher, OffsetDateTime publishedAt, String url) {}
 
     public record MoneyValue(Number value, String unit) {}
 }

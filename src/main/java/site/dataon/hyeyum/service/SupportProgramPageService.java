@@ -170,35 +170,36 @@ public class SupportProgramPageService {
 
     @Transactional
     public ApiDataResponse<SupportProgramSaveResponse> save(SupportProgramSaveRequest request) {
-        String code = limit(request.code(), 20);
+        String code = request.code().trim();
         BtpSupportProgram supportProgram =
                 supportProgramRepository.findByProgramYearAndCode(request.programYear(), code).orElse(null);
         boolean exists = supportProgram != null;
         LocalDate startDate = parseCompactDate(request.period() == null ? null : request.period().startDate());
         LocalDate endDate = parseCompactDate(request.period() == null ? null : request.period().endDate());
+        validatePeriod(startDate, endDate);
         if (exists) {
             supportProgram.update(
-                    limit(request.budgetProgramName(), 1000),
-                    limit(request.programCategory(), 20),
-                    limit(request.supportType(), 20),
+                    request.budgetProgramName(),
+                    request.programCategory(),
+                    request.supportType(),
                     startDate,
                     endDate,
-                    limit(request.departmentName(), 20),
-                    limit(request.localGovernmentName(), 20),
-                    limit(request.programSummary(), 1000));
+                    request.departmentName(),
+                    request.localGovernmentName(),
+                    request.programSummary());
         } else {
             supportProgram =
                     BtpSupportProgram.create(
                             code,
                             request.programYear(),
-                            limit(request.budgetProgramName(), 1000),
-                            limit(request.programCategory(), 20),
-                            limit(request.supportType(), 20),
+                            request.budgetProgramName(),
+                            request.programCategory(),
+                            request.supportType(),
                             startDate,
                             endDate,
-                            limit(request.departmentName(), 20),
-                            limit(request.localGovernmentName(), 20),
-                            limit(request.programSummary(), 1000));
+                            request.departmentName(),
+                            request.localGovernmentName(),
+                            request.programSummary());
         }
         BtpSupportProgram savedProgram = supportProgramRepository.save(supportProgram);
         elasticsearchService.index(savedProgram);
@@ -300,6 +301,12 @@ public class SupportProgramPageService {
         return LocalDate.parse(value.substring(0, Math.min(value.length(), 10)));
     }
 
+    private void validatePeriod(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("지원사업 시작일은 종료일보다 늦을 수 없습니다.");
+        }
+    }
+
     private Double round(Double value) {
         return value == null ? null : Math.round(value * 100.0) / 100.0;
     }
@@ -315,10 +322,4 @@ public class SupportProgramPageService {
         }
     }
 
-    private String limit(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
-    }
 }

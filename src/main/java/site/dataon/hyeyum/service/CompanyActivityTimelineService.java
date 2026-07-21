@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.CompanyNtisCollaborativeProject;
 import site.dataon.hyeyum.domain.CompanyNtisLeadProject;
@@ -32,7 +33,6 @@ import site.dataon.hyeyum.repository.CompanyRepository;
 public class CompanyActivityTimelineService {
 
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
-    private static final String SELECTED_RESULT = "지원대상";
     private static final String PATENT_REGISTERED = "PATENT_REGISTERED";
     private static final String PATENT_APPLICATION = "PATENT_APPLICATION";
     private static final String NTIS_PROJECT_PERIOD = "NTIS_PROJECT_PERIOD";
@@ -71,7 +71,7 @@ public class CompanyActivityTimelineService {
         List<BtpSupportHistory> supportHistories = supportHistoryRepository
                 .findByCompanyIdOrderBySupportYearAscSupportHistoryIdAsc(companyId)
                 .stream()
-                .filter(history -> sameText(history.getSelectionResult(), SELECTED_RESULT))
+                .filter(history -> sameText(history.getSelectionResult(), SupportSelectionResults.SELECTED))
                 .toList();
 
         List<PointEventItem> patentEvents = patentEvents(patents);

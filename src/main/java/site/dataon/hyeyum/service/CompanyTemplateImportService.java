@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.dto.CompanyTemplateImportResponse;
 
 @Service
@@ -351,13 +352,14 @@ public class CompanyTemplateImportService {
                 """
                 insert into btp_support_history (
                     support_year, code, budget_program_name, support_type, start_date, end_date,
-                    company_id, industry_code, province_name, main_product, established_year, source_hash
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    selection_result, company_id, industry_code, province_name, main_product, established_year, source_hash
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (source_hash) do update set
                     budget_program_name = excluded.budget_program_name,
                     support_type = excluded.support_type,
                     start_date = excluded.start_date,
                     end_date = excluded.end_date,
+                    selection_result = excluded.selection_result,
                     industry_code = excluded.industry_code,
                     province_name = excluded.province_name,
                     main_product = excluded.main_product,
@@ -369,6 +371,7 @@ public class CompanyTemplateImportService {
                 supportProgram.supportType(),
                 supportProgram.startDate(),
                 supportProgram.endDate(),
+                SupportSelectionResults.SELECTED,
                 companyId,
                 text(row, header.column("KSIC코드(11차)")),
                 text(row, header.column("지역")),

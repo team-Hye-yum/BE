@@ -1,34 +1,18 @@
 package site.dataon.hyeyum.service;
 
-import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.Company;
 import site.dataon.hyeyum.domain.CompanyEmploymentStatistics;
@@ -58,8 +42,6 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementDerived;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementPoint;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementsResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.MoneyValue;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.NewsItem;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.NewsResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProjectItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectItem;
@@ -104,8 +86,6 @@ public class CompanyDashboardService {
     private final CompanyIndustryBenchmarkMappingRepository benchmarkMappingRepository;
     private final IndustryBenchmarkIndexRepository benchmarkIndexRepository;
     private final IndustryBenchmarkMetricRepository benchmarkMetricRepository;
-    private final HttpClient httpClient;
-
     public CompanyDashboardService(
             CompanyRepository companyRepository,
             CompanyFinancialStatisticsRepository financialStatisticsRepository,
@@ -127,7 +107,6 @@ public class CompanyDashboardService {
         this.benchmarkMappingRepository = benchmarkMappingRepository;
         this.benchmarkIndexRepository = benchmarkIndexRepository;
         this.benchmarkMetricRepository = benchmarkMetricRepository;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     }
 
     @Transactional(readOnly = true)
@@ -390,21 +369,6 @@ public class CompanyDashboardService {
         return new ApiDataResponse<>(new AiSummaryResponse(findCompany(companyId).getAiSummary()));
     }
 
-    @Transactional(readOnly = true)
-    public ApiDataResponse<NewsResponse> news(Integer companyId, Integer limit) {
-        Company company = findCompany(companyId);
-        int resolvedLimit = Math.max(1, Math.min(Optional.ofNullable(limit).orElse(3), 10));
-        if (company.getCompanyName() == null || company.getCompanyName().isBlank()) {
-            return new ApiDataResponse<>(new NewsResponse(companyId, company.getCompanyName(), "MISSING_COMPANY_NAME", List.of()));
-        }
-        try {
-            return new ApiDataResponse<>(new NewsResponse(
-                    companyId, company.getCompanyName(), "OK", fetchGoogleNews(company.getCompanyName(), resolvedLimit)));
-        } catch (Exception exception) {
-            return new ApiDataResponse<>(new NewsResponse(companyId, company.getCompanyName(), "RSS_FETCH_FAILED", List.of()));
-        }
-    }
-
     private Company findCompany(Integer companyId) {
         return companyRepository
                 .findById(companyId)
@@ -487,31 +451,6 @@ public class CompanyDashboardService {
         return rates;
     }
 
-    private List<NewsItem> fetchGoogleNews(String companyName, int limit) throws Exception {
-        String query = URLEncoder.encode(companyName, StandardCharsets.UTF_8);
-        URI uri = URI.create("https://news.google.com/rss/search?q=" + query + "&hl=ko&gl=KR&ceid=KR:ko");
-        HttpRequest request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(5)).GET().build();
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() >= 400) {
-            return List.of();
-        }
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        NodeList itemNodes = factory.newDocumentBuilder()
-                .parse(new ByteArrayInputStream(response.body()))
-                .getElementsByTagName("item");
-        List<NewsItem> items = new ArrayList<>();
-        for (int index = 0; index < itemNodes.getLength() && items.size() < limit; index++) {
-            Element item = (Element) itemNodes.item(index);
-            items.add(new NewsItem(
-                    text(item, "title"),
-                    text(item, "source"),
-                    parseRssDate(text(item, "pubDate")),
-                    text(item, "link")));
-        }
-        return items;
-    }
-
     private ComputedMetricItem metric(String code, String label, Double value, String unit) {
         return new ComputedMetricItem(code, label, round(value), unit);
     }
@@ -564,23 +503,4 @@ public class CompanyDashboardService {
         return baseDate.getDayOfYear() < establishedDate.getDayOfYear() ? age - 1 : age;
     }
 
-    private String text(Element element, String tagName) {
-        NodeList nodes = element.getElementsByTagName(tagName);
-        return nodes.getLength() == 0 ? null : nodes.item(0).getTextContent();
-    }
-
-    private OffsetDateTime parseRssDate(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            DateTimeFormatter formatter = new DateTimeFormatterBuilder()
-                    .parseCaseInsensitive()
-                    .appendPattern("EEE, dd MMM yyyy HH:mm:ss zzz")
-                    .toFormatter(java.util.Locale.ENGLISH);
-            return OffsetDateTime.from(formatter.parse(value));
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
 }

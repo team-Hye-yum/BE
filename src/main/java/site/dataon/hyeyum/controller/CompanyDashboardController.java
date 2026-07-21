@@ -5,14 +5,11 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.AiSummaryResponse;
@@ -23,7 +20,6 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.EmploymentsResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.FinancialPositionResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.GrowthScenarioResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.IncomeStatementsResponse;
-import site.dataon.hyeyum.dto.CompanyDashboardResponses.NewsResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
@@ -170,17 +166,5 @@ public class CompanyDashboardController {
     })
     public ApiDataResponse<AiSummaryResponse> aiSummary(@PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.aiSummary(companyId);
-    }
-
-    @GetMapping("/news")
-    @Operation(summary = "기업별 최신 뉴스", description = "기업명을 검색어로 Google News RSS를 조회한다. 기업명이 없으면 MISSING_COMPANY_NAME 상태를 반환한다.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "기업 뉴스 조회 성공"),
-        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
-    })
-    public ApiDataResponse<NewsResponse> news(
-            @PathVariable("companyId") @NotNull Integer companyId,
-            @RequestParam(defaultValue = "3") @Min(1) @Max(10) Integer limit) {
-        return companyDashboardService.news(companyId, limit);
     }
 }

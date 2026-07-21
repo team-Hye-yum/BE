@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.dto.CompanyMetricError;
 import site.dataon.hyeyum.dto.CompanyMetricRecalculationResult;
 
@@ -30,7 +31,6 @@ public class CompanyMetricCalculationService {
     private static final Logger log = LoggerFactory.getLogger(CompanyMetricCalculationService.class);
     private static final int CAGR_START_YEAR = 2020;
     private static final int CAGR_END_YEAR = 2024;
-    private static final String SUPPORTED_SELECTION_RESULT = "지원대상";
 
     private final JdbcTemplate jdbcTemplate;
     private final OpenAiCompanyMetricTextClient openAiCompanyMetricTextClient;
@@ -556,7 +556,7 @@ public class CompanyMetricCalculationService {
                     }
                     return values;
                 },
-                SUPPORTED_SELECTION_RESULT);
+                SupportSelectionResults.SELECTED);
     }
 
     private Double debtRatio(FinancialRow financial) {
@@ -589,7 +589,7 @@ public class CompanyMetricCalculationService {
         if (employment == null) {
             return null;
         }
-        return ratio(employment.pensionRetireeCount(), employment.pensionNewHireCount());
+        return percentage(employment.pensionRetireeCount(), employment.pensionSubscriberCount());
     }
 
     private Double percentage(Integer numerator, Integer denominator) {

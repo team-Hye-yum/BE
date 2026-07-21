@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.CompanyEmploymentStatistics;
 import site.dataon.hyeyum.domain.CompanyFinancialStatistics;
@@ -46,7 +47,6 @@ public class CompanySupportHistoryReviewService {
 
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     private static final String KRW_THOUSAND = "KRW_THOUSAND";
-    private static final String SELECTED_RESULT = "지원대상";
     private static final String EMPTY_MESSAGE = "비교 가능한 과거 지원 이력 없음";
     private static final String POST_SUPPORT_EMPTY_MESSAGE = "지원 이후 변화를 확인할 부산TP 지원 이력이 없음";
     private static final int MAX_COMPARISON_COUNT = 2;
@@ -117,7 +117,7 @@ public class CompanySupportHistoryReviewService {
 
         List<ComparisonItem> comparisons = candidates.stream().map(ComparisonCandidate::item).toList();
         Summary summary = new Summary(
-                supportHistoryRepository.countByCompanyIdAndSelectionResult(companyId, SELECTED_RESULT),
+                supportHistoryRepository.countByCompanyIdAndSelectionResult(companyId, SupportSelectionResults.SELECTED),
                 effectiveLatestTargets.size(),
                 nationalRndCount(companyId),
                 comparisons.size());
@@ -230,7 +230,9 @@ public class CompanySupportHistoryReviewService {
         if (employment != null && employment.getEmployeeCount() != null) {
             presentCount++;
         }
-        presentCount++;
+        if (registeredPatentCount > 0) {
+            presentCount++;
+        }
         if (ntisProjectCount > 0) {
             presentCount++;
         }
@@ -474,7 +476,7 @@ public class CompanySupportHistoryReviewService {
 
     private List<BtpSupportHistory> selectedOnly(List<BtpSupportHistory> histories) {
         return histories.stream()
-                .filter(history -> sameText(history.getSelectionResult(), SELECTED_RESULT))
+                .filter(history -> sameText(history.getSelectionResult(), SupportSelectionResults.SELECTED))
                 .toList();
     }
 
