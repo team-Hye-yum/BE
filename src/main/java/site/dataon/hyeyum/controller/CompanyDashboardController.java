@@ -24,6 +24,7 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisCollaborativeProject
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.NtisLeadProjectListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ProductiveActivitiesSummaryResponse;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ResearchDevelopmentStatusResponse;
 import site.dataon.hyeyum.service.CompanyDashboardService;
 
 @Validated
@@ -91,6 +92,17 @@ public class CompanyDashboardController {
     public ApiDataResponse<CertificationsIpSummaryResponse> certificationsIpSummary(
             @PathVariable("companyId") @NotNull Integer companyId) {
         return companyDashboardService.certificationsIpSummary(companyId);
+    }
+
+    @GetMapping("/research-development/status")
+    @Operation(summary = "연구개발 조직·인력 현황", description = "최근 연구원수, 기업부설연구소 보유 여부와 등록일, 연구개발전담부서 보유 여부와 등록일을 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "연구개발 조직·인력 현황 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
+    public ApiDataResponse<ResearchDevelopmentStatusResponse> researchDevelopmentStatus(
+            @PathVariable("companyId") @NotNull Integer companyId) {
+        return companyDashboardService.researchDevelopmentStatus(companyId);
     }
 
     @GetMapping("/patents")

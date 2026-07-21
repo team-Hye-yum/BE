@@ -69,6 +69,13 @@ public final class CompanyDashboardResponses {
 
     public record ResearchOrganization(String code, String label, Boolean active, String registeredDate) {}
 
+    public record ResearchDevelopmentStatusResponse(
+            Integer researcherCount,
+            ResearchOrganizationStatus researchLab,
+            ResearchOrganizationStatus rndDepartment) {}
+
+    public record ResearchOrganizationStatus(Boolean exists, String registeredDate) {}
+
     public record PatentListResponse(List<PatentItem> items) {}
 
     public record PatentItem(

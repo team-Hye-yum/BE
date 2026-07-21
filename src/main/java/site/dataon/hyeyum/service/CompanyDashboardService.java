@@ -54,6 +54,8 @@ import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.PatentListResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ProductiveActivitiesSummaryResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ResearchOrganization;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ResearchDevelopmentStatusResponse;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.ResearchOrganizationStatus;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportHistoriesSummary;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.SupportMarker;
 import site.dataon.hyeyum.repository.BtpSupportHistoryRepository;
@@ -217,6 +219,19 @@ public class CompanyDashboardService {
                                 "연구개발전담부서",
                                 company.getHasRndDepartment(),
                                 formatDate(company.getRndDepartmentRegisteredDate())))));
+    }
+
+    @Transactional(readOnly = true)
+    public ApiDataResponse<ResearchDevelopmentStatusResponse> researchDevelopmentStatus(Integer companyId) {
+        Company company = findCompany(companyId);
+        return new ApiDataResponse<>(new ResearchDevelopmentStatusResponse(
+                company.getResearcherCount(),
+                new ResearchOrganizationStatus(
+                        company.getHasResearchLab(),
+                        registeredDate(company.getHasResearchLab(), company.getResearchLabRegisteredDate())),
+                new ResearchOrganizationStatus(
+                        company.getHasRndDepartment(),
+                        registeredDate(company.getHasRndDepartment(), company.getRndDepartmentRegisteredDate()))));
     }
 
     @Transactional(readOnly = true)
@@ -494,6 +509,10 @@ public class CompanyDashboardService {
 
     private String formatDate(LocalDate date) {
         return date == null ? null : BASIC_DATE.format(date);
+    }
+
+    private String registeredDate(Boolean exists, LocalDate registeredDate) {
+        return Boolean.TRUE.equals(exists) ? formatDate(registeredDate) : null;
     }
 
     private Integer companyAge(LocalDate establishedDate, LocalDate referenceDate) {
