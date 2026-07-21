@@ -12,6 +12,9 @@ public interface BtpSupportHistoryRepository extends JpaRepository<BtpSupportHis
 
     int countByCompanyIdAndSelectionResult(Integer companyId, String selectionResult);
 
+    List<BtpSupportHistory> findByCompanyIdAndSelectionResultOrderBySupportYearDescSupportHistoryIdAsc(
+            Integer companyId, String selectionResult);
+
     @Query("select max(h.supportYear) from BtpSupportHistory h where h.companyId = :companyId")
     Integer findMaxSupportYear(@Param("companyId") Integer companyId);
 

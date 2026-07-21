@@ -9,6 +9,8 @@ public interface CompanyEmploymentStatisticsRepository extends JpaRepository<Com
 
     List<CompanyEmploymentStatistics> findByCompanyIdOrderByYearAsc(Integer companyId);
 
+    List<CompanyEmploymentStatistics> findTop2ByCompanyIdOrderByYearDesc(Integer companyId);
+
     @Query("select max(s.year) from CompanyEmploymentStatistics s")
     Integer findMaxYear();
 }

@@ -12,6 +12,9 @@ public interface CompanyPatentRepository extends JpaRepository<CompanyPatent, Lo
 
     long countByCompanyIdAndRegistrationStatusAndIsActiveTrue(Integer companyId, String registrationStatus);
 
+    long countByCompanyIdAndPatentTypeAndRegistrationStatusAndIsActiveTrue(
+            Integer companyId, String patentType, String registrationStatus);
+
     @Query(
             """
             select count(p)

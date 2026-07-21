@@ -9,6 +9,8 @@ public interface CompanyFinancialStatisticsRepository extends JpaRepository<Comp
 
     List<CompanyFinancialStatistics> findByCompanyIdOrderByYearAsc(Integer companyId);
 
+    List<CompanyFinancialStatistics> findTop2ByCompanyIdOrderByYearDesc(Integer companyId);
+
     @Query("select max(s.year) from CompanyFinancialStatistics s")
     Integer findMaxYear();
 }
