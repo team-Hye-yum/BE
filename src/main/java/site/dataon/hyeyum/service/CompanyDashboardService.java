@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import site.dataon.hyeyum.common.MetricUnits;
+import site.dataon.hyeyum.common.MoneyUnits;
+import site.dataon.hyeyum.common.PatentRegistrationStatuses;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.Company;
 import site.dataon.hyeyum.domain.CompanyEmploymentStatistics;
@@ -68,8 +71,6 @@ import site.dataon.hyeyum.repository.IndustryBenchmarkMetricRepository;
 public class CompanyDashboardService {
 
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
-    private static final String KRW = "KRW";
-    private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String REVENUE_INDEX = "REVENUE_INDEX";
     private static final String REVENUE_GROWTH_RATE = "REVENUE_GROWTH_RATE";
     private static final Integer BASE_YEAR = 2021;
@@ -140,7 +141,7 @@ public class CompanyDashboardService {
                         statistics.getPaidInCapital(),
                         new DebtRatioDerived(round(company.getDebtRatio()))))
                 .toList();
-        return new ApiDataResponse<>(new FinancialPositionResponse(companyId, KRW_THOUSAND, series));
+        return new ApiDataResponse<>(new FinancialPositionResponse(companyId, MoneyUnits.KRW_THOUSAND, series));
     }
 
     @Transactional(readOnly = true)
@@ -162,7 +163,7 @@ public class CompanyDashboardService {
                                 growthPercent(salesByYear.get(stat.getYear() - 1), stat.getSalesAmount()),
                                 round(company.getCostOfSalesRatio()))))
                 .toList();
-        return new ApiDataResponse<>(new IncomeStatementsResponse(companyId, KRW_THOUSAND, series));
+        return new ApiDataResponse<>(new IncomeStatementsResponse(companyId, MoneyUnits.KRW_THOUSAND, series));
     }
 
     @Transactional(readOnly = true)
@@ -193,7 +194,8 @@ public class CompanyDashboardService {
     @Transactional(readOnly = true)
     public ApiDataResponse<CertificationsIpSummaryResponse> certificationsIpSummary(Integer companyId) {
         Company company = findCompany(companyId);
-        long activePatentCount = patentRepository.countByCompanyIdAndRegistrationStatusAndIsActiveTrue(companyId, "등록");
+        long activePatentCount = patentRepository.countByCompanyIdAndRegistrationStatusAndIsActiveTrue(
+                companyId, PatentRegistrationStatuses.REGISTERED);
         return new ApiDataResponse<>(new CertificationsIpSummaryResponse(
                 companyId,
                 activePatentCount,
@@ -258,7 +260,7 @@ public class CompanyDashboardService {
         NtisSummary ntis = new NtisSummary(
                 leadProjects.size(),
                 collaborativeProjects.size(),
-                new MoneyValue(recentFiveYearFund, KRW),
+                new MoneyValue(recentFiveYearFund, MoneyUnits.KRW),
                 latestParticipationYear,
                 "동일 과제, 동일 기준연도 조합에서 최신 기준일자만 표시");
         return new ApiDataResponse<>(new ProductiveActivitiesSummaryResponse(
@@ -283,9 +285,9 @@ public class CompanyDashboardService {
                         formatDate(project.getAnnualResearchStartDate()),
                         formatDate(project.getAnnualResearchEndDate()),
                         project.getScienceTechnologyCategoryName(),
-                        new MoneyValue(project.getGovernmentResearchFund(), KRW),
-                        new MoneyValue(project.getPrivateResearchFund(), KRW),
-                        new MoneyValue(project.getTotalResearchFund(), KRW)))
+                        new MoneyValue(project.getGovernmentResearchFund(), MoneyUnits.KRW),
+                        new MoneyValue(project.getPrivateResearchFund(), MoneyUnits.KRW),
+                        new MoneyValue(project.getTotalResearchFund(), MoneyUnits.KRW)))
                 .toList();
         return new ApiDataResponse<>(new NtisLeadProjectListResponse(items));
     }
@@ -304,9 +306,9 @@ public class CompanyDashboardService {
                         project.getCollaborationParticipationTypeName(),
                         project.getCollaborationCountryName(),
                         project.getResearchPerformerTypeName(),
-                        new MoneyValue(project.getCommissionedResearchFund(), KRW),
-                        new MoneyValue(project.getCollaborativeResearchExpense(), KRW),
-                        new MoneyValue(project.getCollaborativeResearchIncome(), KRW),
+                        new MoneyValue(project.getCommissionedResearchFund(), MoneyUnits.KRW),
+                        new MoneyValue(project.getCollaborativeResearchExpense(), MoneyUnits.KRW),
+                        new MoneyValue(project.getCollaborativeResearchIncome(), MoneyUnits.KRW),
                         project.getHasCompanyCollaboration(),
                         project.getHasUniversityCollaboration(),
                         project.getHasPublicInstituteCollaboration(),
@@ -322,14 +324,14 @@ public class CompanyDashboardService {
         return new ApiDataResponse<>(new ComputedMetricsResponse(
                 companyId,
                 List.of(
-                        metric("DEBT_RATIO", "부채 비율", company.getDebtRatio(), "PERCENT"),
-                        metric("COST_OF_SALES_RATIO", "매출 원가율", company.getCostOfSalesRatio(), "PERCENT"),
-                        metric("SALES_GROWTH", "매출 성장성", company.getSalesGrowthRate(), "PERCENT"),
-                        metric("EMPLOYMENT_GROWTH", "고용 성장성", company.getEmploymentGrowthRate(), "PERCENT"),
-                        metric("GOVERNMENT_RD_DEPENDENCY", "정부 R&D 의존도", company.getGovernmentRndDependency(), "PERCENT"),
-                        metric("SUPPORTED_COMPANY_SALES_CHANGE_RATE", "지원 기업 매출 변화율", company.getSupportedSalesGrowthRate(), "PERCENT"),
-                        metric("EMPLOYMENT_DIVERGENCE_INDEX", "고용 괴리 지수", company.getEmploymentPeakIndex(), "PERCENT_POINT"),
-                        metric("EMPLOYMENT_TURNOVER_RATE", "고용 회전율", company.getEmployeeTurnoverRate(), "PERCENT"))));
+                        metric("DEBT_RATIO", "부채 비율", company.getDebtRatio(), MetricUnits.PERCENT),
+                        metric("COST_OF_SALES_RATIO", "매출 원가율", company.getCostOfSalesRatio(), MetricUnits.PERCENT),
+                        metric("SALES_GROWTH", "매출 성장성", company.getSalesGrowthRate(), MetricUnits.PERCENT),
+                        metric("EMPLOYMENT_GROWTH", "고용 성장성", company.getEmploymentGrowthRate(), MetricUnits.PERCENT),
+                        metric("GOVERNMENT_RD_DEPENDENCY", "정부 R&D 의존도", company.getGovernmentRndDependency(), MetricUnits.PERCENT),
+                        metric("SUPPORTED_COMPANY_SALES_CHANGE_RATE", "지원 기업 매출 변화율", company.getSupportedSalesGrowthRate(), MetricUnits.PERCENT),
+                        metric("EMPLOYMENT_DIVERGENCE_INDEX", "고용 괴리 지수", company.getEmploymentPeakIndex(), MetricUnits.PERCENT_POINT),
+                        metric("EMPLOYMENT_TURNOVER_RATE", "고용 회전율", company.getEmployeeTurnoverRate(), MetricUnits.PERCENT))));
     }
 
     @Transactional(readOnly = true)

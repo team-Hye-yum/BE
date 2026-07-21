@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import site.dataon.hyeyum.common.PatentRegistrationStatuses;
 import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.CompanyNtisCollaborativeProject;
@@ -91,7 +92,8 @@ public class CompanyActivityTimelineService {
     private List<PointEventItem> patentEvents(List<CompanyPatent> patents) {
         Map<PointEventKey, Integer> counts = new LinkedHashMap<>();
         patents.forEach(patent -> {
-            if (patent.getRegistrationDate() != null && sameText(patent.getRegistrationStatus(), "등록")) {
+            if (patent.getRegistrationDate() != null
+                    && sameText(patent.getRegistrationStatus(), PatentRegistrationStatuses.REGISTERED)) {
                 increment(counts, new PointEventKey(PATENT_REGISTERED, patent.getRegistrationDate().getYear(), patent.getRegistrationDate()));
             }
             if (patent.getApplicationDate() != null) {

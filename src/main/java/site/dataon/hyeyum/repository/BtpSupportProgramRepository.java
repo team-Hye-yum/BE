@@ -77,7 +77,7 @@ public interface BtpSupportProgramRepository extends JpaRepository<BtpSupportPro
                     left join lateral (
                         select count(*)::int as registered_patent_count
                         from company_patent
-                        where company_id = c.company_id and registration_status = '등록' and is_active = true
+                        where company_id = c.company_id and registration_status = :registeredPatentStatus and is_active = true
                     ) patent_count on true
                     left join lateral (
                         select (
@@ -105,5 +105,6 @@ public interface BtpSupportProgramRepository extends JpaRepository<BtpSupportPro
     List<SupportProgramCompanyProjection> findCompaniesForProgram(
             @Param("code") String code,
             @Param("programYear") Integer programYear,
-            @Param("budgetProgramName") String budgetProgramName);
+            @Param("budgetProgramName") String budgetProgramName,
+            @Param("registeredPatentStatus") String registeredPatentStatus);
 }

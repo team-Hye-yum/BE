@@ -34,15 +34,18 @@ public class CompanyMetricCalculationService {
 
     private final JdbcTemplate jdbcTemplate;
     private final OpenAiCompanyMetricTextClient openAiCompanyMetricTextClient;
+    private final CompanyMetricFormulaService formulaService;
     private final int aiParallelism;
     private final ExecutorService backgroundAiExecutor = Executors.newSingleThreadExecutor();
 
     public CompanyMetricCalculationService(
             JdbcTemplate jdbcTemplate,
             OpenAiCompanyMetricTextClient openAiCompanyMetricTextClient,
+            CompanyMetricFormulaService formulaService,
             @Value("${openai.company-metrics.parallelism:3}") int aiParallelism) {
         this.jdbcTemplate = jdbcTemplate;
         this.openAiCompanyMetricTextClient = openAiCompanyMetricTextClient;
+        this.formulaService = formulaService;
         this.aiParallelism = Math.max(1, aiParallelism);
     }
 
@@ -495,7 +498,7 @@ public class CompanyMetricCalculationService {
                     while (rs.next()) {
                         values.put(
                                 rs.getInt("company_id"),
-                                cagr(
+                                formulaService.cagr(
                                         doubleOrNull(rs.getObject("start_value")),
                                         doubleOrNull(rs.getObject("end_value")),
                                         CAGR_END_YEAR - CAGR_START_YEAR));
@@ -520,10 +523,7 @@ public class CompanyMetricCalculationService {
                     while (rs.next()) {
                         Double governmentFund = doubleOrNull(rs.getObject("government_fund"));
                         Double privateFund = doubleOrNull(rs.getObject("private_fund"));
-                        double denominator = nullToZero(governmentFund) + nullToZero(privateFund);
-                        values.put(
-                                rs.getInt("company_id"),
-                                denominator == 0.0 ? null : nullToZero(governmentFund) / denominator * 100.0);
+                        values.put(rs.getInt("company_id"), formulaService.governmentRndDependency(governmentFund, privateFund));
                     }
                     return values;
                 });
@@ -563,52 +563,28 @@ public class CompanyMetricCalculationService {
         if (financial == null) {
             return null;
         }
-        return percentage(financial.totalLiabilities(), financial.totalEquity());
+        return formulaService.debtRatio(financial.totalLiabilities(), financial.totalEquity());
     }
 
     private Double costOfSalesRatio(FinancialRow financial) {
         if (financial == null) {
             return null;
         }
-        return percentage(financial.costOfSales(), financial.salesAmount());
+        return formulaService.costOfSalesRatio(financial.costOfSales(), financial.salesAmount());
     }
 
     private Double employmentPeakIndex(EmploymentRow employment) {
-        if (employment == null || employment.employeeCount() == null || employment.pensionSubscriberCount() == null) {
+        if (employment == null) {
             return null;
         }
-        if (employment.employeeCount() == 0) {
-            return null;
-        }
-        return Math.abs(employment.employeeCount() - employment.pensionSubscriberCount())
-                / (double) employment.employeeCount()
-                * 100.0;
+        return formulaService.employmentPeakIndex(employment.employeeCount(), employment.pensionSubscriberCount());
     }
 
     private Double employeeTurnoverRate(EmploymentRow employment) {
         if (employment == null) {
             return null;
         }
-        return percentage(employment.pensionRetireeCount(), employment.pensionSubscriberCount());
-    }
-
-    private Double percentage(Integer numerator, Integer denominator) {
-        Double ratio = ratio(numerator, denominator);
-        return ratio == null ? null : ratio * 100.0;
-    }
-
-    private Double ratio(Integer numerator, Integer denominator) {
-        if (numerator == null || denominator == null || denominator == 0) {
-            return null;
-        }
-        return numerator / (double) denominator;
-    }
-
-    private Double cagr(Double startValue, Double endValue, int yearDiff) {
-        if (startValue == null || endValue == null || yearDiff <= 0 || startValue <= 0.0 || endValue <= 0.0) {
-            return null;
-        }
-        return (Math.pow(endValue / startValue, 1.0 / yearDiff) - 1.0) * 100.0;
+        return formulaService.employeeTurnoverRate(employment.pensionRetireeCount(), employment.pensionSubscriberCount());
     }
 
     private List<CompanyMetricUpdate> generateAiTexts(
@@ -859,10 +835,6 @@ public class CompanyMetricCalculationService {
 
     private Boolean booleanOrNull(Object value) {
         return value == null ? null : (Boolean) value;
-    }
-
-    private double nullToZero(Double value) {
-        return value == null ? 0.0 : value;
     }
 
     private String rootMessage(Throwable throwable) {

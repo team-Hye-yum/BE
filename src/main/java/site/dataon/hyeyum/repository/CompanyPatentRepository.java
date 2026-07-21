@@ -17,11 +17,12 @@ public interface CompanyPatentRepository extends JpaRepository<CompanyPatent, Lo
             select count(p)
             from CompanyPatent p
             where p.companyId = :companyId
-              and p.registrationStatus = '등록'
+              and p.registrationStatus = :registrationStatus
               and p.isActive = true
               and p.registrationDate < :exclusiveEndDate
             """)
     int countRegisteredActivePatentsUntil(
             @Param("companyId") Integer companyId,
+            @Param("registrationStatus") String registrationStatus,
             @Param("exclusiveEndDate") java.time.LocalDate exclusiveEndDate);
 }

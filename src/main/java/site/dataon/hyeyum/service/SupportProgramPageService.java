@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import site.dataon.hyeyum.domain.BtpSupportProgram;
+import site.dataon.hyeyum.common.MoneyUnits;
+import site.dataon.hyeyum.common.PatentRegistrationStatuses;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.CompanyTemplateImportResponse;
 import site.dataon.hyeyum.dto.MoneyAmount;
@@ -46,7 +48,6 @@ public class SupportProgramPageService {
 
     private static final Logger log = LoggerFactory.getLogger(SupportProgramPageService.class);
     private static final DateTimeFormatter COMPACT_DATE = DateTimeFormatter.BASIC_ISO_DATE;
-    private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String[] COMPANY_LIST_HEADERS = {
         "기업일련번호",
         "지역",
@@ -227,7 +228,8 @@ public class SupportProgramPageService {
         return supportProgramRepository.findCompaniesForProgram(
                 supportProgram.getCode(),
                 supportProgram.getProgramYear(),
-                supportProgram.getBudgetProgramName());
+                supportProgram.getBudgetProgramName(),
+                PatentRegistrationStatuses.REGISTERED);
     }
 
     private SupportProgramCompanyItem mapCompanyItem(SupportProgramCompanyProjection projection) {
@@ -238,12 +240,13 @@ public class SupportProgramPageService {
                 projection.getEstablishedYear(),
                 projection.getIndustryName(),
                 projection.getMainProduct(),
-                new YearlyMoneyAmount(projection.getLatestSalesAmount(), KRW_THOUSAND, projection.getLatestSalesYear()),
+                new YearlyMoneyAmount(
+                        projection.getLatestSalesAmount(), MoneyUnits.KRW_THOUSAND, projection.getLatestSalesYear()),
                 projection.getEmployeeCount(),
                 projection.getRegisteredPatentCount(),
                 projection.getNtisProjectCount(),
                 projection.getSupportCount(),
-                new MoneyAmount(projection.getCumulativeSupportAmount(), KRW_THOUSAND),
+                new MoneyAmount(projection.getCumulativeSupportAmount(), MoneyUnits.KRW_THOUSAND),
                 round(projection.getDebtRatio()),
                 round(projection.getSalesGrowthRate()));
     }

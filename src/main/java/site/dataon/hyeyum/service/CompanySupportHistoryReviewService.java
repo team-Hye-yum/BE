@@ -14,6 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import site.dataon.hyeyum.common.MetricUnits;
+import site.dataon.hyeyum.common.MoneyUnits;
+import site.dataon.hyeyum.common.PatentRegistrationStatuses;
 import site.dataon.hyeyum.common.SupportSelectionResults;
 import site.dataon.hyeyum.domain.BtpSupportHistory;
 import site.dataon.hyeyum.domain.CompanyEmploymentStatistics;
@@ -46,7 +49,6 @@ import site.dataon.hyeyum.repository.SupportYearTypeCountProjection;
 public class CompanySupportHistoryReviewService {
 
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
-    private static final String KRW_THOUSAND = "KRW_THOUSAND";
     private static final String EMPTY_MESSAGE = "비교 가능한 과거 지원 이력 없음";
     private static final String POST_SUPPORT_EMPTY_MESSAGE = "지원 이후 변화를 확인할 부산TP 지원 이력이 없음";
     private static final int MAX_COMPARISON_COUNT = 2;
@@ -280,38 +282,38 @@ public class CompanySupportHistoryReviewService {
         addTopChange(candidates, "SALES_AMOUNT", "매출",
                 value(beforeFinancial, CompanyFinancialStatistics::getSalesAmount),
                 value(afterFinancial, CompanyFinancialStatistics::getSalesAmount),
-                KRW_THOUSAND,
-                KRW_THOUSAND,
+                MoneyUnits.KRW_THOUSAND,
+                MoneyUnits.KRW_THOUSAND,
                 this::formatThousandWon);
         addTopChange(candidates, "OPERATING_MARGIN", "영업이익률",
                 value(beforeFinancial, CompanyFinancialStatistics::getOperatingMargin),
                 value(afterFinancial, CompanyFinancialStatistics::getOperatingMargin),
-                "PERCENT",
-                "PERCENT_POINT",
+                MetricUnits.PERCENT,
+                MetricUnits.PERCENT_POINT,
                 this::formatPercent);
         addTopChange(candidates, "EMPLOYEE_COUNT", "종업원",
                 value(beforeEmployment, CompanyEmploymentStatistics::getEmployeeCount),
                 value(afterEmployment, CompanyEmploymentStatistics::getEmployeeCount),
-                "COUNT",
-                "COUNT",
+                MetricUnits.COUNT,
+                MetricUnits.COUNT,
                 value -> formatInteger(value) + "명");
         addTopChange(candidates, "RESEARCH_AND_DEVELOPMENT_EXPENSE", "연구개발비",
                 value(beforeFinancial, CompanyFinancialStatistics::getResearchAndDevelopmentExpense),
                 value(afterFinancial, CompanyFinancialStatistics::getResearchAndDevelopmentExpense),
-                KRW_THOUSAND,
-                KRW_THOUSAND,
+                MoneyUnits.KRW_THOUSAND,
+                MoneyUnits.KRW_THOUSAND,
                 this::formatThousandWon);
         addTopChange(candidates, "REGISTERED_PATENT_COUNT", "특허",
                 registeredPatentCount(companyId, supportEndYear),
                 registeredPatentCount(companyId, observationYear),
-                "COUNT",
-                "COUNT",
+                MetricUnits.COUNT,
+                MetricUnits.COUNT,
                 value -> formatInteger(value) + "건");
         addTopChange(candidates, "NTIS_PROJECT_COUNT", "국가 R&D",
                 ntisProjectCount(companyId, supportEndYear),
                 ntisProjectCount(companyId, observationYear),
-                "COUNT",
-                "COUNT",
+                MetricUnits.COUNT,
+                MetricUnits.COUNT,
                 value -> formatInteger(value) + "건");
 
         return candidates.stream()
@@ -359,7 +361,7 @@ public class CompanySupportHistoryReviewService {
                 changeValue,
                 changeValueUnit,
                 changeRate,
-                "PERCENT",
+                MetricUnits.PERCENT,
                 displayText);
         candidates.add(new TopChangeCandidate(item, Math.abs(changeRate)));
     }
@@ -376,7 +378,7 @@ public class CompanySupportHistoryReviewService {
     }
 
     private String changeDisplay(Number changeValue, String changeValueUnit, double changeRate) {
-        if ("PERCENT_POINT".equals(changeValueUnit)) {
+        if (MetricUnits.PERCENT_POINT.equals(changeValueUnit)) {
             return signedPercentPoint(changeValue.doubleValue()) + ", " + signedPercent(changeRate);
         }
         return signedPercent(changeRate);
@@ -433,7 +435,8 @@ public class CompanySupportHistoryReviewService {
         if (year == null) {
             return 0;
         }
-        return patentRepository.countRegisteredActivePatentsUntil(companyId, LocalDate.of(year + 1, 1, 1));
+        return patentRepository.countRegisteredActivePatentsUntil(
+                companyId, PatentRegistrationStatuses.REGISTERED, LocalDate.of(year + 1, 1, 1));
     }
 
     private int ntisProjectCount(Integer companyId, Integer year) {
@@ -605,7 +608,7 @@ public class CompanySupportHistoryReviewService {
     }
 
     private MoneyValue money(Integer value) {
-        return new MoneyValue(value, KRW_THOUSAND);
+        return new MoneyValue(value, MoneyUnits.KRW_THOUSAND);
     }
 
     private String formatDate(LocalDate date) {
