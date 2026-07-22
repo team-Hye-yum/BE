@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.AiSummaryResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.CertificationsIpSummaryResponse;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.CompanyExistenceResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.CompanyProfileResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ComputedMetricsResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.EmploymentsResponse;
@@ -39,7 +40,18 @@ public class CompanyDashboardController {
         this.companyDashboardService = companyDashboardService;
     }
 
-@GetMapping("/profile")
+    @GetMapping("/existence")
+    @Operation(summary = "기업 존재 여부", description = "기업일련번호(companyId)를 기준으로 해당 기업이 존재하는지 여부만 반환한다.")
+    @ApiResponse(responseCode = "200", description = "기업 존재 여부 조회 성공")
+    public ApiDataResponse<CompanyExistenceResponse> existence(
+            @Parameter(description = "기업일련번호", example = "117")
+                    @PathVariable("companyId")
+                    @NotNull
+                    Integer companyId) {
+        return companyDashboardService.existence(companyId);
+    }
+
+    @GetMapping("/profile")
     @Operation(summary = "기업 정보", description = "기업일련번호(companyId)를 기준으로 기업 기본 정보와 업력 계산값을 반환한다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "기업 정보 조회 성공"),

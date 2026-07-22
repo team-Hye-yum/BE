@@ -6,6 +6,8 @@ public final class CompanyDashboardResponses {
 
     private CompanyDashboardResponses() {}
 
+    public record CompanyExistenceResponse(Integer companyId, boolean exists) {}
+
     public record CompanyProfileResponse(
             Integer companyId,
             String companyName,

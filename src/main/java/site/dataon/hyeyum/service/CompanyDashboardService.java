@@ -29,6 +29,7 @@ import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.AiSummaryResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.CertificationBadge;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.CertificationsIpSummaryResponse;
+import site.dataon.hyeyum.dto.CompanyDashboardResponses.CompanyExistenceResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.CompanyProfileResponse;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ComputedMetricItem;
 import site.dataon.hyeyum.dto.CompanyDashboardResponses.ComputedMetricsResponse;
@@ -117,6 +118,11 @@ public class CompanyDashboardService {
         this.benchmarkMappingRepository = benchmarkMappingRepository;
         this.benchmarkIndexRepository = benchmarkIndexRepository;
         this.benchmarkMetricRepository = benchmarkMetricRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public ApiDataResponse<CompanyExistenceResponse> existence(Integer companyId) {
+        return new ApiDataResponse<>(new CompanyExistenceResponse(companyId, companyRepository.existsById(companyId)));
     }
 
     @Transactional(readOnly = true)
