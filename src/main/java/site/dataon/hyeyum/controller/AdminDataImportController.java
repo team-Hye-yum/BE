@@ -85,6 +85,6 @@ public class AdminDataImportController {
     @GetMapping("/company-metrics")
     @Operation(summary = "기업 계산 지표 재계산")
     public CompanyMetricRecalculationResult recalculateCompanyMetrics() {
-        return companyMetricCalculationService.recalculateAll();
+        return companyMetricCalculationService.recalculateAllWithoutAi();
     }
 }

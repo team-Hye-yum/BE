@@ -57,8 +57,16 @@ public class CompanyMetricCalculationService {
     }
 
     public CompanyMetricRecalculationResult recalculateAll() {
+        return recalculateAll(true);
+    }
+
+    public CompanyMetricRecalculationResult recalculateAllWithoutAi() {
+        return recalculateAll(false);
+    }
+
+    private CompanyMetricRecalculationResult recalculateAll(boolean includeAi) {
         long startedAt = System.nanoTime();
-        log.info("Company metric recalculation started. includeAi=true");
+        log.info("Company metric recalculation started. includeAi={}", includeAi);
         List<CompanyMetricError> errors = Collections.synchronizedList(new ArrayList<>());
         try {
             updateIndustryDescriptionsFromKsicInfo();
@@ -123,10 +131,13 @@ public class CompanyMetricCalculationService {
         }
         log.info("Calculated numeric company metrics. pendingUpdates={}", pendingUpdates.size());
 
-        List<CompanyMetricUpdate> updates = generateAiTexts(pendingUpdates, companyProfiles, errors);
+        List<CompanyMetricUpdate> updates = includeAi
+                ? generateAiTexts(pendingUpdates, companyProfiles, errors)
+                : withoutAiTexts(pendingUpdates);
         CompanyMetricUpdateResult updateResult = batchUpdate(updates, errors);
         log.info(
-                "Company metric recalculation finished. totalCompanies={}, updatedCompanies={}, aiUpdatedCompanies={}, errors={}, elapsedMs={}",
+                "Company metric recalculation finished. includeAi={}, totalCompanies={}, updatedCompanies={}, aiUpdatedCompanies={}, errors={}, elapsedMs={}",
+                includeAi,
                 companyIds.size(),
                 updateResult.updatedCompanyCount(),
                 updateResult.aiUpdatedCompanyCount(),
