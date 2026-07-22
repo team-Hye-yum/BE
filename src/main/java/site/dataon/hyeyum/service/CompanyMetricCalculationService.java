@@ -31,6 +31,8 @@ public class CompanyMetricCalculationService {
     private static final Logger log = LoggerFactory.getLogger(CompanyMetricCalculationService.class);
     private static final int CAGR_START_YEAR = 2020;
     private static final int CAGR_END_YEAR = 2024;
+    private static final int GOVERNMENT_RND_DEPENDENCY_YEAR_WINDOW = 3;
+    private static final double KRW_THOUSAND_TO_KRW = 1000.0d;
 
     private final JdbcTemplate jdbcTemplate;
     private final OpenAiCompanyMetricTextClient openAiCompanyMetricTextClient;
@@ -512,21 +514,58 @@ public class CompanyMetricCalculationService {
     private Map<Integer, Double> governmentRndDependencies() {
         return jdbcTemplate.query(
                 """
-                select company_id,
-                       sum(coalesce(government_research_fund, 0)) as government_fund,
-                       sum(coalesce(private_research_fund, 0)) as private_fund
-                from company_ntis_lead_project
-                group by company_id
+                with latest_financial_years as (
+                    select company_id,
+                           max(year) as latest_year
+                    from company_financial_statistics
+                    where research_and_development_expense is not null
+                    group by company_id
+                ),
+                rnd_expenses as (
+                    select financial.company_id,
+                           latest.latest_year,
+                           sum(coalesce(financial.research_and_development_expense, 0)) * ? as research_and_development_expense
+                    from company_financial_statistics financial
+                    join latest_financial_years latest
+                      on latest.company_id = financial.company_id
+                    where financial.year between latest.latest_year - ? and latest.latest_year
+                    group by financial.company_id, latest.latest_year
+                ),
+                ntis_projects as (
+                    select distinct
+                           company_id,
+                           reference_year,
+                           project_name,
+                           total_research_start_date,
+                           total_research_end_date,
+                           annual_research_start_date,
+                           annual_research_end_date,
+                           government_research_fund
+                    from company_ntis_lead_project
+                )
+                select rnd.company_id,
+                       coalesce(sum(coalesce(ntis.government_research_fund, 0)), 0) as government_fund,
+                       rnd.research_and_development_expense
+                from rnd_expenses rnd
+                left join ntis_projects ntis
+                  on ntis.company_id = rnd.company_id
+                 and ntis.reference_year between rnd.latest_year - ? and rnd.latest_year
+                group by rnd.company_id, rnd.research_and_development_expense
                 """,
                 rs -> {
                     Map<Integer, Double> values = new HashMap<>();
                     while (rs.next()) {
                         Double governmentFund = doubleOrNull(rs.getObject("government_fund"));
-                        Double privateFund = doubleOrNull(rs.getObject("private_fund"));
-                        values.put(rs.getInt("company_id"), formulaService.governmentRndDependency(governmentFund, privateFund));
+                        Double researchAndDevelopmentExpense = doubleOrNull(rs.getObject("research_and_development_expense"));
+                        values.put(
+                                rs.getInt("company_id"),
+                                formulaService.governmentRndDependency(governmentFund, researchAndDevelopmentExpense));
                     }
                     return values;
-                });
+                },
+                KRW_THOUSAND_TO_KRW,
+                GOVERNMENT_RND_DEPENDENCY_YEAR_WINDOW - 1,
+                GOVERNMENT_RND_DEPENDENCY_YEAR_WINDOW - 1);
     }
 
     private Map<Integer, Double> averageSupportedSalesGrowthRates() {

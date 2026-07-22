@@ -24,8 +24,8 @@ public class CompanyMetricFormulaService {
         return percentage(pensionRetireeCount, pensionSubscriberCount);
     }
 
-    public Double governmentRndDependency(Double governmentFund, Double privateFund) {
-        double denominator = nullToZero(governmentFund) + nullToZero(privateFund);
+    public Double governmentRndDependency(Double governmentFund, Double researchAndDevelopmentExpense) {
+        double denominator = nullToZero(researchAndDevelopmentExpense);
         return denominator == 0.0d ? null : nullToZero(governmentFund) / denominator * 100.0d;
     }
 
