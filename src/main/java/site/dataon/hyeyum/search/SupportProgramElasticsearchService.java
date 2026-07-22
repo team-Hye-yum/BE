@@ -48,32 +48,40 @@ public class SupportProgramElasticsearchService {
             SearchResponse<Map> response = client.search(search -> search
                     .index("support-programs")
                     .size(Math.max(1, limit))
-                    .query(query -> query.bool(bool -> bool
-                            .minimumShouldMatch("1")
-                            .should(should -> should.term(term -> term
-                                    .field("code")
-                                    .value(normalized)
-                                    .boost(8.0f)))
-                            .should(should -> should.match(match -> match
-                                    .field("budgetProgramName")
-                                    .query(normalized)
-                                    .boost(5.0f)))
-                            .should(should -> should.match(match -> match
-                                    .field("searchText")
-                                    .query(normalized)
-                                    .boost(4.0f)))
-                            .should(should -> should.match(match -> match
-                                    .field("searchChosung")
-                                    .query(chosung)
-                                    .boost(3.0f)))
-                            .should(should -> should.match(match -> match
-                                    .field("searchJamo")
-                                    .query(jamo)
-                                    .boost(2.0f)))
-                            .should(should -> should.match(match -> match
-                                    .field("programSummary")
-                                    .query(normalized)
-                                    .boost(1.0f)))))
+                    .query(query -> query.bool(bool -> {
+                        bool.minimumShouldMatch("1")
+                                .should(should -> should.term(term -> term
+                                        .field("code")
+                                        .value(normalized)
+                                        .boost(8.0f)))
+                                .should(should -> should.match(match -> match
+                                        .field("budgetProgramName")
+                                        .query(normalized)
+                                        .boost(5.0f)))
+                                .should(should -> should.match(match -> match
+                                        .field("searchText")
+                                        .query(normalized)
+                                        .boost(4.0f)))
+                                .should(should -> should.match(match -> match
+                                        .field("searchChosung")
+                                        .query(chosung)
+                                        .boost(3.0f)))
+                                .should(should -> should.match(match -> match
+                                        .field("searchJamo")
+                                        .query(jamo)
+                                        .boost(2.0f)))
+                                .should(should -> should.match(match -> match
+                                        .field("programSummary")
+                                        .query(normalized)
+                                        .boost(1.0f)));
+                        if (isYearKeyword(normalized)) {
+                            bool.should(should -> should.term(term -> term
+                                    .field("programYear")
+                                    .value(Integer.valueOf(normalized))
+                                    .boost(6.0f)));
+                        }
+                        return bool;
+                    }))
                     .sort(sort -> sort.field(field -> field.field("programYear").order(SortOrder.Desc)))
                     .sort(sort -> sort.field(field -> field.field("code").order(SortOrder.Asc))), Map.class);
             return response.hits().hits().stream()
@@ -147,5 +155,9 @@ public class SupportProgramElasticsearchService {
             return null;
         }
         return Integer.valueOf(value.toString());
+    }
+
+    private boolean isYearKeyword(String keyword) {
+        return keyword != null && keyword.length() == 4 && keyword.chars().allMatch(Character::isDigit);
     }
 }

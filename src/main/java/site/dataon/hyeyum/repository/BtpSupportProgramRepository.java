@@ -19,6 +19,7 @@ public interface BtpSupportProgramRepository extends JpaRepository<BtpSupportPro
             from BtpSupportProgram p
             where lower(replace(coalesce(p.budgetProgramName, ''), ' ', '')) like lower(concat('%', replace(:keyword, ' ', ''), '%'))
                or lower(coalesce(p.code, '')) like lower(concat('%', :keyword, '%'))
+               or str(p.programYear) like concat('%', :keyword, '%')
             order by p.programYear desc, p.budgetProgramName, p.code
             """)
     List<BtpSupportProgram> search(@Param("keyword") String keyword);

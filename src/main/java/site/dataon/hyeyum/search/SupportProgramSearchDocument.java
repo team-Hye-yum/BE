@@ -71,6 +71,7 @@ public class SupportProgramSearchDocument {
         document.localGovernmentName = program.getLocalGovernmentName();
         document.programSummary = program.getProgramSummary();
         document.searchText = KoreanSearchText.normalizedText(
+                document.programYear == null ? null : document.programYear.toString(),
                 program.getBudgetProgramName(),
                 program.getCode(),
                 program.getProgramCategory(),
