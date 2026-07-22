@@ -52,6 +52,7 @@ public class CompanySupportHistoryReviewService {
     private static final String EMPTY_MESSAGE = "비교 가능한 과거 지원 이력 없음";
     private static final String POST_SUPPORT_EMPTY_MESSAGE = "지원 이후 변화를 확인할 부산TP 지원 이력이 없음";
     private static final int MAX_COMPARISON_COUNT = 2;
+    private static final int MAX_POST_SUPPORT_OBSERVATION_YEAR_COUNT = 3;
     private static final int MAX_TOP_CHANGE_COUNT = 3;
 
     private final CompanyRepository companyRepository;
@@ -159,6 +160,8 @@ public class CompanySupportHistoryReviewService {
         Integer maxKodataYear = maxComparableKodataYear();
 
         List<ChangeObservationItem> observations = historiesByEndYear.entrySet().stream()
+                .sorted(Map.Entry.<Integer, List<BtpSupportHistory>>comparingByKey(Comparator.reverseOrder()))
+                .limit(MAX_POST_SUPPORT_OBSERVATION_YEAR_COUNT)
                 .map(entry -> postSupportObservation(
                         companyId,
                         entry.getKey(),
