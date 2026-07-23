@@ -3,7 +3,7 @@ package site.dataon.hyeyum.dto;
 import java.util.List;
 
 public record BtpSolutionConnectionEvidenceCompaniesResponse(
-        String sectionCode,
+        String divisionCode,
         Summary summary,
         List<CompanyEvidenceItem> items,
         int page,

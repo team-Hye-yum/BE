@@ -24,7 +24,7 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                         select distinct c.company_id
                         from company c
                         join btp_support_history h on h.company_id = c.company_id
-                        where upper(coalesce(c.ksic_code, '')) like concat(:sectionCode, '%')
+                        where upper(coalesce(c.ksic_code, '')) like concat(:industryPrefix, '%')
                     )
                     select
                         count(b.company_id)::int as establishmentCount,
@@ -35,7 +35,7 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                      and e.year = :year
                     """,
             nativeQuery = true)
-    BtpCompanyScaleProjection findBtpScale(@Param("sectionCode") String sectionCode, @Param("year") Integer year);
+    BtpCompanyScaleProjection findBtpScale(@Param("industryPrefix") String industryPrefix, @Param("year") Integer year);
 
     @Query(
             value =
@@ -44,7 +44,7 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                         select distinct c.company_id
                         from company c
                         join btp_support_history h on h.company_id = c.company_id
-                        where upper(coalesce(c.ksic_code, '')) like concat(:sectionCode, '%')
+                        where upper(coalesce(c.ksic_code, '')) like concat(:industryPrefix, '%')
                     )
                     select
                         case
@@ -65,7 +65,7 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                     """,
             nativeQuery = true)
     List<BtpCompanyBucketProjection> findBtpEmployeeSizeStats(
-            @Param("sectionCode") String sectionCode, @Param("year") Integer year);
+            @Param("industryPrefix") String industryPrefix, @Param("year") Integer year);
 
     @Query(
             value =
@@ -74,7 +74,7 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                         select distinct c.company_id, c.business_entity_type
                         from company c
                         join btp_support_history h on h.company_id = c.company_id
-                        where upper(coalesce(c.ksic_code, '')) like concat(:sectionCode, '%')
+                        where upper(coalesce(c.ksic_code, '')) like concat(:industryPrefix, '%')
                     )
                     select
                         case
@@ -87,5 +87,5 @@ public interface BtpSolutionCompanyStatRepository extends Repository<Company, In
                     group by name
                     """,
             nativeQuery = true)
-    List<BtpCompanyBucketProjection> findBtpBusinessTypeStats(@Param("sectionCode") String sectionCode);
+    List<BtpCompanyBucketProjection> findBtpBusinessTypeStats(@Param("industryPrefix") String industryPrefix);
 }

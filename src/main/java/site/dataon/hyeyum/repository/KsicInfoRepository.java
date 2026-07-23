@@ -25,4 +25,6 @@ public interface KsicInfoRepository extends JpaRepository<KsicInfo, String> {
 
     Optional<KsicInfo> findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
             String sectionCode);
+
+    Optional<KsicInfo> findFirstByDivisionCodeOrderByGroupCodeAscClassCodeAscSubclassCodeAsc(String divisionCode);
 }

@@ -88,26 +88,25 @@ public class BtpSolutionIndustryService {
         return new ApiDataResponse<>(new KsicIndustrySearchResponse(items));
     }
 
-    public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(String sectionCode) {
-        String normalizedSectionCode = normalizeSectionCode(sectionCode);
-        KsicInfo section = ksicInfoRepository
-                .findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
-                        normalizedSectionCode)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown KSIC section code: " + sectionCode));
+    public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(String divisionCode) {
+        KsicInfo division = findDivision(divisionCode);
+        String normalizedDivisionCode = division.getDivisionCode();
+        String sectionCode = division.getSectionCode();
+        String industryPrefix = sectionCode + normalizedDivisionCode;
 
-        Integer busanBaseYear = industryStatRepository.findLatestYearBySectionCode(normalizedSectionCode);
+        Integer busanBaseYear = industryStatRepository.findLatestYearBySectionCode(sectionCode);
         Integer btpBaseYear = companyStatRepository.findLatestEmploymentYear();
 
         Optional<BtpSolutionIndustryStat> busanScale = busanBaseYear == null
                 ? Optional.empty()
-                : industryStatRepository.findBusanScale(normalizedSectionCode, busanBaseYear);
+                : industryStatRepository.findBusanScale(sectionCode, busanBaseYear);
         BtpCompanyScaleProjection btpScale = btpBaseYear == null
                 ? null
-                : companyStatRepository.findBtpScale(normalizedSectionCode, btpBaseYear);
+                : companyStatRepository.findBtpScale(industryPrefix, btpBaseYear);
 
         BtpSolutionIndustryOverviewResponse response = new BtpSolutionIndustryOverviewResponse(
-                normalizedSectionCode,
-                section.getSectionName(),
+                normalizedDivisionCode,
+                division.getDivisionName(),
                 busanBaseYear,
                 btpBaseYear,
                 new BtpSolutionIndustryOverviewResponse.IndustryScale(
@@ -118,19 +117,19 @@ public class BtpSolutionIndustryService {
                                 btpScale == null ? null : btpScale.getEstablishmentCount(),
                                 btpScale == null ? null : btpScale.getEmployeeCount())),
                 new BtpSolutionIndustryOverviewResponse.BusinessTypeRatio(
-                        busanBusinessTypeRatio(normalizedSectionCode, busanBaseYear),
-                        btpBusinessTypeRatio(normalizedSectionCode)),
-                employeeSizeRatios(normalizedSectionCode, busanBaseYear, btpBaseYear));
+                        busanBusinessTypeRatio(sectionCode, busanBaseYear),
+                        btpBusinessTypeRatio(industryPrefix)),
+                employeeSizeRatios(sectionCode, industryPrefix, busanBaseYear, btpBaseYear));
 
         return new ApiDataResponse<>(response);
     }
 
-    public ApiDataResponse<BtpSolutionInfraHubResponse> infraHubs(String sectionCode) {
-        String normalizedSectionCode = normalizeSectionCode(sectionCode);
-        validateSectionCode(normalizedSectionCode, sectionCode);
+    public ApiDataResponse<BtpSolutionInfraHubResponse> infraHubs(String divisionCode) {
+        String normalizedDivisionCode = findDivision(divisionCode).getDivisionCode();
 
         List<InfraHubRow> hubRows = jdbcTemplate.query(
-                """
+                evidenceCte()
+                        + """
                 select
                     hub.hub_id,
                     hub.hub_name,
@@ -145,10 +144,10 @@ public class BtpSolutionIndustryService {
                     hub.image_url,
                     hub.space_url,
                     hub.directions_url,
-                    coalesce(count(distinct match.equipment_id), 0)::int as equipment_count
+                    count(distinct matched.equipment_id)::int as equipment_count
                 from public.btp_infra_hub hub
-                left join public.v_btp_equipment_hub_match match
-                  on match.hub_id = hub.hub_id
+                join matched
+                  on matched.hub_id = hub.hub_id
                 where hub.active = true
                 group by
                     hub.hub_id,
@@ -167,12 +166,16 @@ public class BtpSolutionIndustryService {
                     hub.display_order
                 order by hub.display_order, hub.hub_id
                 """,
-                INFRA_HUB_ROW_MAPPER);
+                INFRA_HUB_ROW_MAPPER,
+                normalizedDivisionCode,
+                normalizedDivisionCode);
 
         Set<Long> hubIds = hubRows.stream().map(InfraHubRow::hubId).collect(Collectors.toSet());
         Map<Long, List<BtpSolutionInfraHubResponse.Facility>> facilitiesByHub = facilitiesByHub(hubIds);
-        Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> categoriesByHub = topCategoriesByHub(hubIds);
-        Map<Long, List<BtpSolutionInfraHubResponse.SampleEquipment>> samplesByHub = sampleEquipmentsByHub(hubIds);
+        Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> categoriesByHub =
+                relevantTopCategoriesByHub(normalizedDivisionCode, hubIds);
+        Map<Long, List<BtpSolutionInfraHubResponse.SampleEquipment>> samplesByHub =
+                relevantSampleEquipmentsByHub(normalizedDivisionCode, hubIds);
 
         List<BtpSolutionInfraHubResponse.InfraHub> hubs = hubRows.stream()
                 .map(row -> new BtpSolutionInfraHubResponse.InfraHub(
@@ -195,13 +198,12 @@ public class BtpSolutionIndustryService {
                         facilitiesByHub.getOrDefault(row.hubId(), List.of())))
                 .toList();
 
-        return new ApiDataResponse<>(new BtpSolutionInfraHubResponse(normalizedSectionCode, hubs));
+        return new ApiDataResponse<>(new BtpSolutionInfraHubResponse(normalizedDivisionCode, hubs));
     }
 
     public ApiDataResponse<BtpSolutionConnectionEvidenceCompaniesResponse> connectionEvidenceCompanies(
-            String sectionCode, String keyword, Long hubId, int page, int size) {
-        String normalizedSectionCode = normalizeSectionCode(sectionCode);
-        validateSectionCode(normalizedSectionCode, sectionCode);
+            String divisionCode, String keyword, Long hubId, int page, int size) {
+        String normalizedDivisionCode = findDivision(divisionCode).getDivisionCode();
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
         int pageNumber = Math.max(0, page);
         int pageSize = Math.max(1, Math.min(size, 50));
@@ -219,8 +221,8 @@ public class BtpSolutionIndustryService {
                           and (? = '' or lower(company_name) like '%' || lower(?) || '%')
                         """,
                 EVIDENCE_SUMMARY_ROW_MAPPER,
-                normalizedSectionCode,
-                normalizedSectionCode,
+                normalizedDivisionCode,
+                normalizedDivisionCode,
                 hubId,
                 hubId,
                 normalizedKeyword,
@@ -238,8 +240,8 @@ public class BtpSolutionIndustryService {
                         limit ? offset ?
                         """,
                 (rs, rowNum) -> rs.getInt("company_id"),
-                normalizedSectionCode,
-                normalizedSectionCode,
+                normalizedDivisionCode,
+                normalizedDivisionCode,
                 hubId,
                 hubId,
                 normalizedKeyword,
@@ -249,7 +251,7 @@ public class BtpSolutionIndustryService {
 
         List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> items = companyIds.isEmpty()
                 ? List.of()
-                : evidenceItems(normalizedSectionCode, hubId, companyIds);
+                : evidenceItems(normalizedDivisionCode, hubId, companyIds);
         long totalElements = summary == null ? 0 : summary.companyCount();
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil(totalElements / (double) pageSize);
         BtpSolutionConnectionEvidenceCompaniesResponse.Summary responseSummary =
@@ -259,14 +261,14 @@ public class BtpSolutionIndustryService {
                         summary == null ? 0 : summary.hubCount());
 
         return new ApiDataResponse<>(new BtpSolutionConnectionEvidenceCompaniesResponse(
-                normalizedSectionCode, responseSummary, items, pageNumber, pageSize, totalElements, totalPages));
+                normalizedDivisionCode, responseSummary, items, pageNumber, pageSize, totalElements, totalPages));
     }
 
     private List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> evidenceItems(
-            String sectionCode, Long hubId, List<Integer> companyIds) {
+            String divisionCode, Long hubId, List<Integer> companyIds) {
         List<Object> args = new ArrayList<>();
-        args.add(sectionCode);
-        args.add(sectionCode);
+        args.add(divisionCode);
+        args.add(divisionCode);
         args.add(hubId);
         args.add(hubId);
         args.addAll(companyIds);
@@ -318,8 +320,8 @@ public class BtpSolutionIndustryService {
                       on section_history.company_id = company.company_id
                     left join public.ksic_info history_ksic
                       on history_ksic.ksic_code = section_history.industry_code
-                    where company_ksic.section_code = ?
-                       or history_ksic.section_code = ?
+                    where company_ksic.division_code = ?
+                       or history_ksic.division_code = ?
                 ),
                 company_sources as (
                     select
@@ -388,13 +390,6 @@ public class BtpSolutionIndustryService {
                 """;
     }
 
-    private void validateSectionCode(String normalizedSectionCode, String originalSectionCode) {
-        ksicInfoRepository
-                .findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
-                        normalizedSectionCode)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown KSIC section code: " + originalSectionCode));
-    }
-
     private KsicIndustrySearchItem mapSearchItem(KsicInfo ksicInfo) {
         return new KsicIndustrySearchItem(
                 ksicInfo.getKsicCode(),
@@ -421,10 +416,20 @@ public class BtpSolutionIndustryService {
         return value == null ? "" : value;
     }
 
-    private String normalizeSectionCode(String sectionCode) {
-        String normalized = sectionCode == null ? "" : sectionCode.trim().toUpperCase();
+    private KsicInfo findDivision(String divisionCode) {
+        String normalizedDivisionCode = normalizeDivisionCode(divisionCode);
+        return ksicInfoRepository
+                .findFirstByDivisionCodeOrderByGroupCodeAscClassCodeAscSubclassCodeAsc(normalizedDivisionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown KSIC division code: " + divisionCode));
+    }
+
+    private String normalizeDivisionCode(String divisionCode) {
+        String normalized = divisionCode == null ? "" : divisionCode.trim().toUpperCase();
+        if (normalized.length() == 3 && Character.isLetter(normalized.charAt(0))) {
+            normalized = normalized.substring(1);
+        }
         if (normalized.isBlank()) {
-            throw new IllegalArgumentException("sectionCode must not be blank.");
+            throw new IllegalArgumentException("divisionCode must not be blank.");
         }
         return normalized;
     }
@@ -458,20 +463,25 @@ public class BtpSolutionIndustryService {
                         Collectors.mapping(FacilityRow::facility, Collectors.toList())));
     }
 
-    private Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> topCategoriesByHub(Set<Long> hubIds) {
+    private Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> topCategoriesByHub(
+            String divisionCode, Set<Long> hubIds) {
         if (hubIds.isEmpty()) {
             return Map.of();
         }
+        List<Object> args = new ArrayList<>();
+        args.add(divisionCode);
+        args.add(divisionCode);
+        args.addAll(hubIds);
         return jdbcTemplate.query(
-                        """
-                        with category_counts as (
+                        evidenceCte()
+                                + """
+                        , category_counts as (
                             select
-                                match.hub_id,
+                                matched.hub_id,
                                 coalesce(equipment.category_large, '미분류') as name,
-                                count(*)::int as count
-                            from public.v_btp_equipment_hub_match match
-                            join public.btp_equipment equipment on equipment.id = match.equipment_id
-                            where match.hub_id in (%s)
+                                count(distinct matched.equipment_id)::int as count
+                            from matched
+                            where matched.hub_id in (%s)
                             group by match.hub_id, coalesce(equipment.category_large, '미분류')
                         ),
                         ranked as (
@@ -489,7 +499,7 @@ public class BtpSolutionIndustryService {
                         """
                                 .formatted(placeholders(hubIds.size())),
                         CATEGORY_ROW_MAPPER,
-                        hubIds.toArray())
+                        args.toArray())
                 .stream()
                 .collect(Collectors.groupingBy(
                         CategoryRow::hubId,
@@ -533,6 +543,99 @@ public class BtpSolutionIndustryService {
                         Collectors.mapping(SampleEquipmentRow::sampleEquipment, Collectors.toList())));
     }
 
+    private Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> relevantTopCategoriesByHub(
+            String divisionCode, Set<Long> hubIds) {
+        if (hubIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object> args = new ArrayList<>();
+        args.add(divisionCode);
+        args.add(divisionCode);
+        args.addAll(hubIds);
+
+        return jdbcTemplate.query(
+                        evidenceCte()
+                                + """
+                        , category_counts as (
+                            select
+                                hub_id,
+                                coalesce(category_large, 'Uncategorized') as name,
+                                count(distinct equipment_id)::int as count
+                            from matched
+                            where hub_id in (%s)
+                            group by hub_id, coalesce(category_large, 'Uncategorized')
+                        ),
+                        ranked as (
+                            select
+                                hub_id,
+                                name,
+                                count,
+                                row_number() over (partition by hub_id order by count desc, name) as rank
+                            from category_counts
+                        )
+                        select hub_id, name, count
+                        from ranked
+                        where rank <= 5
+                        order by hub_id, rank
+                        """
+                                .formatted(placeholders(hubIds.size())),
+                        CATEGORY_ROW_MAPPER,
+                        args.toArray())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        CategoryRow::hubId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(CategoryRow::category, Collectors.toList())));
+    }
+
+    private Map<Long, List<BtpSolutionInfraHubResponse.SampleEquipment>> relevantSampleEquipmentsByHub(
+            String divisionCode, Set<Long> hubIds) {
+        if (hubIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object> args = new ArrayList<>();
+        args.add(divisionCode);
+        args.add(divisionCode);
+        args.addAll(hubIds);
+
+        return jdbcTemplate.query(
+                        evidenceCte()
+                                + """
+                        , distinct_equipment as (
+                            select distinct hub_id, equipment_id, equipment_name, category_large
+                            from matched
+                            where hub_id in (%s)
+                        ),
+                        ranked as (
+                            select
+                                distinct_equipment.hub_id,
+                                distinct_equipment.equipment_id,
+                                distinct_equipment.equipment_name,
+                                distinct_equipment.category_large,
+                                equipment.location_name,
+                                row_number() over (
+                                    partition by distinct_equipment.hub_id
+                                    order by distinct_equipment.equipment_id
+                                ) as rank
+                            from distinct_equipment
+                            join public.btp_equipment equipment
+                              on equipment.id = distinct_equipment.equipment_id
+                        )
+                        select hub_id, equipment_id, equipment_name, category_large, location_name
+                        from ranked
+                        where rank <= 5
+                        order by hub_id, rank
+                        """
+                                .formatted(placeholders(hubIds.size())),
+                        SAMPLE_EQUIPMENT_ROW_MAPPER,
+                        args.toArray())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        SampleEquipmentRow::hubId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(SampleEquipmentRow::sampleEquipment, Collectors.toList())));
+    }
+
     private String placeholders(int count) {
         return String.join(",", Collections.nCopies(count, "?"));
     }
@@ -568,8 +671,8 @@ public class BtpSolutionIndustryService {
         return new BtpSolutionIndustryOverviewResponse.RatioPair(ratio(corporation, total), ratio(individual, total));
     }
 
-    private BtpSolutionIndustryOverviewResponse.RatioPair btpBusinessTypeRatio(String sectionCode) {
-        List<BtpCompanyBucketProjection> stats = companyStatRepository.findBtpBusinessTypeStats(sectionCode);
+    private BtpSolutionIndustryOverviewResponse.RatioPair btpBusinessTypeRatio(String industryPrefix) {
+        List<BtpCompanyBucketProjection> stats = companyStatRepository.findBtpBusinessTypeStats(industryPrefix);
         int total = sumBuckets(stats);
         if (total == 0) {
             return new BtpSolutionIndustryOverviewResponse.RatioPair(null, null);
@@ -581,9 +684,9 @@ public class BtpSolutionIndustryService {
     }
 
     private List<BtpSolutionIndustryOverviewResponse.EmployeeSizeRatio> employeeSizeRatios(
-            String sectionCode, Integer busanBaseYear, Integer btpBaseYear) {
+            String sectionCode, String industryPrefix, Integer busanBaseYear, Integer btpBaseYear) {
         Map<String, Integer> busanCounts = busanEmployeeSizeCounts(sectionCode, busanBaseYear);
-        Map<String, Integer> btpCounts = btpEmployeeSizeCounts(sectionCode, btpBaseYear);
+        Map<String, Integer> btpCounts = btpEmployeeSizeCounts(industryPrefix, btpBaseYear);
         int busanTotal = sumValues(busanCounts);
         int btpTotal = sumValues(btpCounts);
 
@@ -609,11 +712,11 @@ public class BtpSolutionIndustryService {
                         Integer::sum));
     }
 
-    private Map<String, Integer> btpEmployeeSizeCounts(String sectionCode, Integer btpBaseYear) {
+    private Map<String, Integer> btpEmployeeSizeCounts(String industryPrefix, Integer btpBaseYear) {
         if (btpBaseYear == null) {
             return Map.of();
         }
-        return bucketCounts(companyStatRepository.findBtpEmployeeSizeStats(sectionCode, btpBaseYear));
+        return bucketCounts(companyStatRepository.findBtpEmployeeSizeStats(industryPrefix, btpBaseYear));
     }
 
     private Map<String, Integer> bucketCounts(List<BtpCompanyBucketProjection> stats) {

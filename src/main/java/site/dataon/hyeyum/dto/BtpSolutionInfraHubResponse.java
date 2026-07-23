@@ -3,7 +3,7 @@ package site.dataon.hyeyum.dto;
 import java.math.BigDecimal;
 import java.util.List;
 
-public record BtpSolutionInfraHubResponse(String sectionCode, List<InfraHub> hubs) {
+public record BtpSolutionInfraHubResponse(String divisionCode, List<InfraHub> hubs) {
 
     public record InfraHub(
             Long hubId,

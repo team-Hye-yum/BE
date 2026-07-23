@@ -46,41 +46,41 @@ public class BtpSolutionController {
         return industryService.searchIndustries(keyword, limit);
     }
 
-    @GetMapping("/industries/{sectionCode}/overview")
+    @GetMapping("/industries/{divisionCode}/overview")
     @Operation(
             summary = "Get BTP solution industry overview",
-            description = "Returns Busan public statistics and BTP-supported company ratios for a KSIC section.")
+            description = "Returns Busan public statistics and BTP-supported company ratios for a KSIC division.")
     public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(
-            @Parameter(description = "KSIC section code", example = "C")
-                    @PathVariable("sectionCode")
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
                     @NotBlank
-                    String sectionCode) {
-        return industryService.overview(sectionCode);
+                    String divisionCode) {
+        return industryService.overview(divisionCode);
     }
 
-    @GetMapping("/industries/{sectionCode}/infra-hubs")
+    @GetMapping("/industries/{divisionCode}/infra-hubs")
     @Operation(
             summary = "Get BTP infrastructure hubs",
             description =
                     "Returns official BTP hubs with equipment counts, top equipment categories, sample equipment, and facility details.")
     public ApiDataResponse<BtpSolutionInfraHubResponse> infraHubs(
-            @Parameter(description = "KSIC section code", example = "C")
-                    @PathVariable("sectionCode")
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
                     @NotBlank
-                    String sectionCode) {
-        return industryService.infraHubs(sectionCode);
+                    String divisionCode) {
+        return industryService.infraHubs(divisionCode);
     }
 
-    @GetMapping("/industries/{sectionCode}/connection-evidence/companies")
+    @GetMapping("/industries/{divisionCode}/connection-evidence/companies")
     @Operation(
             summary = "Get BTP solution company connection evidence",
             description =
                     "Returns company-level evidence that connects selected industry companies to equipment and BTP hubs.")
     public ApiDataResponse<BtpSolutionConnectionEvidenceCompaniesResponse> connectionEvidenceCompanies(
-            @Parameter(description = "KSIC section code", example = "C")
-                    @PathVariable("sectionCode")
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
                     @NotBlank
-                    String sectionCode,
+                    String divisionCode,
             @Parameter(description = "Company name keyword", example = "조선")
                     @RequestParam(value = "keyword", defaultValue = "")
                     String keyword,
@@ -95,6 +95,6 @@ public class BtpSolutionController {
                     @RequestParam(value = "size", defaultValue = "10")
                     @Min(1)
                     int size) {
-        return industryService.connectionEvidenceCompanies(sectionCode, keyword, hubId, page, size);
+        return industryService.connectionEvidenceCompanies(divisionCode, keyword, hubId, page, size);
     }
 }

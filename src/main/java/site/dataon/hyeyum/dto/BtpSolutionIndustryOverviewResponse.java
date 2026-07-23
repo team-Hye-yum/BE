@@ -3,8 +3,8 @@ package site.dataon.hyeyum.dto;
 import java.util.List;
 
 public record BtpSolutionIndustryOverviewResponse(
-        String sectionCode,
-        String sectionName,
+        String divisionCode,
+        String divisionName,
         Integer busanBaseYear,
         Integer btpBaseYear,
         IndustryScale industryScale,
