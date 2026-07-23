@@ -95,14 +95,14 @@ public class BtpSolutionIndustryService {
         String industryPrefix = sectionCode + normalizedDivisionCode;
 
         Integer busanBaseYear = industryStatRepository.findLatestYearBySectionCode(sectionCode);
-        Integer btpBaseYear = companyStatRepository.findLatestEmploymentYear();
+        Integer btpBaseYear = companyStatRepository.findLatestBtpEmploymentYear(industryPrefix);
 
         Optional<BtpSolutionIndustryStat> busanScale = busanBaseYear == null
                 ? Optional.empty()
                 : industryStatRepository.findBusanScale(sectionCode, busanBaseYear);
         BtpCompanyScaleProjection btpScale = btpBaseYear == null
                 ? null
-                : companyStatRepository.findBtpScale(industryPrefix, btpBaseYear);
+                : companyStatRepository.findBtpScale(industryPrefix);
 
         BtpSolutionIndustryOverviewResponse response = new BtpSolutionIndustryOverviewResponse(
                 normalizedDivisionCode,
@@ -119,7 +119,7 @@ public class BtpSolutionIndustryService {
                 new BtpSolutionIndustryOverviewResponse.BusinessTypeRatio(
                         busanBusinessTypeRatio(sectionCode, busanBaseYear),
                         btpBusinessTypeRatio(industryPrefix)),
-                employeeSizeRatios(sectionCode, industryPrefix, busanBaseYear, btpBaseYear));
+                employeeSizeRatios(sectionCode, industryPrefix, busanBaseYear));
 
         return new ApiDataResponse<>(response);
     }
@@ -684,9 +684,9 @@ public class BtpSolutionIndustryService {
     }
 
     private List<BtpSolutionIndustryOverviewResponse.EmployeeSizeRatio> employeeSizeRatios(
-            String sectionCode, String industryPrefix, Integer busanBaseYear, Integer btpBaseYear) {
+            String sectionCode, String industryPrefix, Integer busanBaseYear) {
         Map<String, Integer> busanCounts = busanEmployeeSizeCounts(sectionCode, busanBaseYear);
-        Map<String, Integer> btpCounts = btpEmployeeSizeCounts(industryPrefix, btpBaseYear);
+        Map<String, Integer> btpCounts = btpEmployeeSizeCounts(industryPrefix);
         int busanTotal = sumValues(busanCounts);
         int btpTotal = sumValues(btpCounts);
 
@@ -712,11 +712,8 @@ public class BtpSolutionIndustryService {
                         Integer::sum));
     }
 
-    private Map<String, Integer> btpEmployeeSizeCounts(String industryPrefix, Integer btpBaseYear) {
-        if (btpBaseYear == null) {
-            return Map.of();
-        }
-        return bucketCounts(companyStatRepository.findBtpEmployeeSizeStats(industryPrefix, btpBaseYear));
+    private Map<String, Integer> btpEmployeeSizeCounts(String industryPrefix) {
+        return bucketCounts(companyStatRepository.findBtpEmployeeSizeStats(industryPrefix));
     }
 
     private Map<String, Integer> bucketCounts(List<BtpCompanyBucketProjection> stats) {
