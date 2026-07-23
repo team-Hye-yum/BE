@@ -20,4 +20,34 @@ public class KsicInfo {
 
     @Column(name = "industry_description", columnDefinition = "text")
     private String industryDescription;
+
+    @Column(name = "section_code", length = 1)
+    private String sectionCode;
+
+    @Column(name = "section_name", length = 200)
+    private String sectionName;
+
+    @Column(name = "division_code", length = 2)
+    private String divisionCode;
+
+    @Column(name = "division_name", length = 300)
+    private String divisionName;
+
+    @Column(name = "group_code", length = 3)
+    private String groupCode;
+
+    @Column(name = "group_name", length = 300)
+    private String groupName;
+
+    @Column(name = "class_code", length = 4)
+    private String classCode;
+
+    @Column(name = "class_name", length = 300)
+    private String className;
+
+    @Column(name = "subclass_code", length = 5)
+    private String subclassCode;
+
+    @Column(name = "subclass_name", length = 300)
+    private String subclassName;
 }
