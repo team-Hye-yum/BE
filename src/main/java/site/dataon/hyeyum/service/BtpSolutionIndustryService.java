@@ -1,13 +1,22 @@
 package site.dataon.hyeyum.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import site.dataon.hyeyum.domain.BtpSolutionIndustryStat;
 import site.dataon.hyeyum.domain.KsicInfo;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
+import site.dataon.hyeyum.repository.BtpCompanyBucketProjection;
+import site.dataon.hyeyum.repository.BtpCompanyScaleProjection;
+import site.dataon.hyeyum.repository.BtpSolutionCompanyStatRepository;
+import site.dataon.hyeyum.repository.BtpSolutionIndustryStatRepository;
 import site.dataon.hyeyum.repository.KsicInfoRepository;
 import site.dataon.hyeyum.search.KsicIndustryElasticsearchService;
 
@@ -15,14 +24,25 @@ import site.dataon.hyeyum.search.KsicIndustryElasticsearchService;
 public class BtpSolutionIndustryService {
 
     private static final Logger log = LoggerFactory.getLogger(BtpSolutionIndustryService.class);
+    private static final String BUSAN_TOTAL = "부산 전체";
+    private static final String EMPLOYEE_SIZE = "EMPLOYEE_SIZE";
+    private static final String ORGANIZATION_FORM = "ORGANIZATION_FORM";
+    private static final List<String> EMPLOYEE_SIZE_BUCKETS =
+            List.of("1~4인", "5~9인", "10~49인", "50~299인", "300인 이상");
 
     private final KsicInfoRepository ksicInfoRepository;
+    private final BtpSolutionIndustryStatRepository industryStatRepository;
+    private final BtpSolutionCompanyStatRepository companyStatRepository;
     private final KsicIndustryElasticsearchService elasticsearchService;
 
     public BtpSolutionIndustryService(
             KsicInfoRepository ksicInfoRepository,
+            BtpSolutionIndustryStatRepository industryStatRepository,
+            BtpSolutionCompanyStatRepository companyStatRepository,
             KsicIndustryElasticsearchService elasticsearchService) {
         this.ksicInfoRepository = ksicInfoRepository;
+        this.industryStatRepository = industryStatRepository;
+        this.companyStatRepository = companyStatRepository;
         this.elasticsearchService = elasticsearchService;
     }
 
@@ -42,6 +62,43 @@ public class BtpSolutionIndustryService {
                 .map(this::mapSearchItem)
                 .toList();
         return new ApiDataResponse<>(new KsicIndustrySearchResponse(items));
+    }
+
+    public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(String sectionCode) {
+        String normalizedSectionCode = normalizeSectionCode(sectionCode);
+        KsicInfo section = ksicInfoRepository
+                .findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
+                        normalizedSectionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown KSIC section code: " + sectionCode));
+
+        Integer busanBaseYear = industryStatRepository.findLatestYearBySectionCode(normalizedSectionCode);
+        Integer btpBaseYear = companyStatRepository.findLatestEmploymentYear();
+
+        Optional<BtpSolutionIndustryStat> busanScale = busanBaseYear == null
+                ? Optional.empty()
+                : industryStatRepository.findBusanScale(normalizedSectionCode, busanBaseYear);
+        BtpCompanyScaleProjection btpScale = btpBaseYear == null
+                ? null
+                : companyStatRepository.findBtpScale(normalizedSectionCode, btpBaseYear);
+
+        BtpSolutionIndustryOverviewResponse response = new BtpSolutionIndustryOverviewResponse(
+                normalizedSectionCode,
+                section.getSectionName(),
+                busanBaseYear,
+                btpBaseYear,
+                new BtpSolutionIndustryOverviewResponse.IndustryScale(
+                        busanScale.map(stat -> new BtpSolutionIndustryOverviewResponse.CountPair(
+                                        stat.getEstablishmentCount(), stat.getEmployeeCount()))
+                                .orElse(new BtpSolutionIndustryOverviewResponse.CountPair(null, null)),
+                        new BtpSolutionIndustryOverviewResponse.CountPair(
+                                btpScale == null ? null : btpScale.getEstablishmentCount(),
+                                btpScale == null ? null : btpScale.getEmployeeCount())),
+                new BtpSolutionIndustryOverviewResponse.BusinessTypeRatio(
+                        busanBusinessTypeRatio(normalizedSectionCode, busanBaseYear),
+                        btpBusinessTypeRatio(normalizedSectionCode)),
+                employeeSizeRatios(normalizedSectionCode, busanBaseYear, btpBaseYear));
+
+        return new ApiDataResponse<>(response);
     }
 
     private KsicIndustrySearchItem mapSearchItem(KsicInfo ksicInfo) {
@@ -68,5 +125,133 @@ public class BtpSolutionIndustryService {
 
     private String nullToBlank(String value) {
         return value == null ? "" : value;
+    }
+
+    private String normalizeSectionCode(String sectionCode) {
+        String normalized = sectionCode == null ? "" : sectionCode.trim().toUpperCase();
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException("sectionCode must not be blank.");
+        }
+        return normalized;
+    }
+
+    private BtpSolutionIndustryOverviewResponse.RatioPair busanBusinessTypeRatio(
+            String sectionCode, Integer busanBaseYear) {
+        if (busanBaseYear == null) {
+            return new BtpSolutionIndustryOverviewResponse.RatioPair(null, null);
+        }
+        List<BtpSolutionIndustryStat> stats =
+                industryStatRepository.findBusanOrganizationStats(sectionCode, busanBaseYear);
+        int total = sumEstablishments(stats);
+        if (total == 0) {
+            return new BtpSolutionIndustryOverviewResponse.RatioPair(null, null);
+        }
+        int corporation = stats.stream()
+                .filter(stat -> containsAny(stat.getDimensionName(), "회사법인", "회사이외법인", "법인"))
+                .map(BtpSolutionIndustryStat::getEstablishmentCount)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        int individual = stats.stream()
+                .filter(stat -> containsAny(stat.getDimensionName(), "개인"))
+                .map(BtpSolutionIndustryStat::getEstablishmentCount)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        return new BtpSolutionIndustryOverviewResponse.RatioPair(ratio(corporation, total), ratio(individual, total));
+    }
+
+    private BtpSolutionIndustryOverviewResponse.RatioPair btpBusinessTypeRatio(String sectionCode) {
+        List<BtpCompanyBucketProjection> stats = companyStatRepository.findBtpBusinessTypeStats(sectionCode);
+        int total = sumBuckets(stats);
+        if (total == 0) {
+            return new BtpSolutionIndustryOverviewResponse.RatioPair(null, null);
+        }
+        Map<String, Integer> counts = bucketCounts(stats);
+        return new BtpSolutionIndustryOverviewResponse.RatioPair(
+                ratio(counts.getOrDefault("CORPORATION", 0), total),
+                ratio(counts.getOrDefault("INDIVIDUAL", 0), total));
+    }
+
+    private List<BtpSolutionIndustryOverviewResponse.EmployeeSizeRatio> employeeSizeRatios(
+            String sectionCode, Integer busanBaseYear, Integer btpBaseYear) {
+        Map<String, Integer> busanCounts = busanEmployeeSizeCounts(sectionCode, busanBaseYear);
+        Map<String, Integer> btpCounts = btpEmployeeSizeCounts(sectionCode, btpBaseYear);
+        int busanTotal = sumValues(busanCounts);
+        int btpTotal = sumValues(btpCounts);
+
+        return EMPLOYEE_SIZE_BUCKETS.stream()
+                .map(bucket -> new BtpSolutionIndustryOverviewResponse.EmployeeSizeRatio(
+                        bucket,
+                        busanTotal == 0 ? null : ratio(busanCounts.getOrDefault(bucket, 0), busanTotal),
+                        btpTotal == 0 ? null : ratio(btpCounts.getOrDefault(bucket, 0), btpTotal)))
+                .toList();
+    }
+
+    private Map<String, Integer> busanEmployeeSizeCounts(String sectionCode, Integer busanBaseYear) {
+        if (busanBaseYear == null) {
+            return Map.of();
+        }
+        return industryStatRepository.findBusanEmployeeSizeStats(sectionCode, busanBaseYear, EMPLOYEE_SIZE_BUCKETS)
+                .stream()
+                .filter(stat -> stat.getEstablishmentCount() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        BtpSolutionIndustryStat::getDimensionName,
+                        BtpSolutionIndustryStat::getEstablishmentCount,
+                        Integer::sum));
+    }
+
+    private Map<String, Integer> btpEmployeeSizeCounts(String sectionCode, Integer btpBaseYear) {
+        if (btpBaseYear == null) {
+            return Map.of();
+        }
+        return bucketCounts(companyStatRepository.findBtpEmployeeSizeStats(sectionCode, btpBaseYear));
+    }
+
+    private Map<String, Integer> bucketCounts(List<BtpCompanyBucketProjection> stats) {
+        return stats.stream()
+                .filter(stat -> stat.getName() != null)
+                .filter(stat -> stat.getCount() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        BtpCompanyBucketProjection::getName, BtpCompanyBucketProjection::getCount, Integer::sum));
+    }
+
+    private int sumEstablishments(List<BtpSolutionIndustryStat> stats) {
+        return stats.stream()
+                .map(BtpSolutionIndustryStat::getEstablishmentCount)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+    }
+
+    private int sumBuckets(List<BtpCompanyBucketProjection> stats) {
+        return stats.stream()
+                .map(BtpCompanyBucketProjection::getCount)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+    }
+
+    private int sumValues(Map<String, Integer> counts) {
+        return counts.values().stream().filter(Objects::nonNull).mapToInt(Integer::intValue).sum();
+    }
+
+    private boolean containsAny(String value, String... needles) {
+        if (value == null) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (value.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Double ratio(int numerator, int denominator) {
+        if (denominator == 0) {
+            return null;
+        }
+        return numerator / (double) denominator;
     }
 }

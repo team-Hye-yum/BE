@@ -1,6 +1,7 @@
 package site.dataon.hyeyum.repository;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,4 +22,7 @@ public interface KsicInfoRepository extends JpaRepository<KsicInfo, String> {
             order by k.sectionCode, k.divisionCode, k.groupCode, k.classCode, k.subclassCode
             """)
     List<KsicInfo> searchByHierarchyText(@Param("keyword") String keyword);
+
+    Optional<KsicInfo> findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
+            String sectionCode);
 }

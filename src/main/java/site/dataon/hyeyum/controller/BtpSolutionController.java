@@ -7,10 +7,12 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
 import site.dataon.hyeyum.service.BtpSolutionIndustryService;
 
@@ -40,5 +42,17 @@ public class BtpSolutionController {
                     @Min(1)
                     int limit) {
         return industryService.searchIndustries(keyword, limit);
+    }
+
+    @GetMapping("/industries/{sectionCode}/overview")
+    @Operation(
+            summary = "Get BTP solution industry overview",
+            description = "Returns Busan public statistics and BTP-supported company ratios for a KSIC section.")
+    public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(
+            @Parameter(description = "KSIC section code", example = "C")
+                    @PathVariable("sectionCode")
+                    @NotBlank
+                    String sectionCode) {
+        return industryService.overview(sectionCode);
     }
 }
