@@ -20,6 +20,7 @@ import site.dataon.hyeyum.domain.BtpSolutionIndustryStat;
 import site.dataon.hyeyum.domain.KsicInfo;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
+import site.dataon.hyeyum.dto.BtpSolutionFunctionInfraCoverageResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
@@ -120,6 +121,136 @@ public class BtpSolutionIndustryService {
                         busanBusinessTypeRatio(sectionCode, busanBaseYear),
                         btpBusinessTypeRatio(industryPrefix)),
                 employeeSizeRatios(sectionCode, industryPrefix, busanBaseYear));
+
+        return new ApiDataResponse<>(response);
+    }
+
+    public ApiDataResponse<BtpSolutionFunctionInfraCoverageResponse> functionInfraCoverage(String divisionCode) {
+        KsicInfo division = findDivision(divisionCode);
+        String normalizedDivisionCode = division.getDivisionCode();
+
+        FunctionInfraCoverageRow coverage = jdbcTemplate.queryForObject(
+                """
+                with sources as (
+                    select
+                        company.company_id,
+                        ksic.division_code,
+                        'company.main_product' as source_field,
+                        company.main_product as source_text
+                    from public.company company
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.division_code = ?
+                    union all
+                    select
+                        history.company_id,
+                        ksic.division_code,
+                        'history.main_product' as source_field,
+                        history.main_product as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.division_code = ?
+                    union all
+                    select
+                        history.company_id,
+                        ksic.division_code,
+                        'history.support_item' as source_field,
+                        history.support_item as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.division_code = ?
+                    union all
+                    select
+                        project.company_id,
+                        ksic.division_code,
+                        'ntis.project_name' as source_field,
+                        project.project_name as source_text
+                    from public.company_ntis_lead_project project
+                    join public.company company on company.company_id = project.company_id
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.division_code = ?
+                ),
+                cleaned as (
+                    select
+                        division_code,
+                        source_field,
+                        trim(source_text) as source_text,
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g')) as normalized_text
+                    from sources
+                    where source_text is not null
+                      and trim(source_text) <> ''
+                    group by
+                        division_code,
+                        source_field,
+                        trim(source_text),
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g'))
+                ),
+                connected as (
+                    select
+                        rule.function_name,
+                        true as connected
+                    from cleaned source
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    group by rule.function_name
+                ),
+                unconnected as (
+                    select
+                        source.source_text as function_name,
+                        false as connected
+                    from cleaned source
+                    where source.source_field in ('company.main_product', 'history.main_product')
+                      and not exists (
+                          select 1
+                          from public.btp_connection_keyword_rule rule
+                          where rule.active = true
+                            and rule.reviewed = true
+                            and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                      )
+                      and length(source.normalized_text) >= 3
+                      and source.normalized_text not like '%지원%'
+                      and source.normalized_text not like '%사업%'
+                      and source.normalized_text not like '%구축%'
+                      and source.normalized_text not like '%인건비%'
+                      and source.normalized_text not like '%인센티브%'
+                    group by source.source_text
+                ),
+                detected as (
+                    select function_name, connected from connected
+                    union all
+                    select function_name, connected from unconnected
+                )
+                select
+                    count(*)::int as detected_function_count,
+                    count(*) filter (where connected)::int as connected_function_count,
+                    count(*) filter (where not connected)::int as unconnected_function_count
+                from detected
+                """,
+                FUNCTION_INFRA_COVERAGE_ROW_MAPPER,
+                normalizedDivisionCode,
+                normalizedDivisionCode,
+                normalizedDivisionCode,
+                normalizedDivisionCode);
+
+        int detectedFunctionCount = coverage == null ? 0 : coverage.detectedFunctionCount();
+        int connectedFunctionCount = coverage == null ? 0 : coverage.connectedFunctionCount();
+        int unconnectedFunctionCount = coverage == null ? 0 : coverage.unconnectedFunctionCount();
+
+        BtpSolutionFunctionInfraCoverageResponse response = new BtpSolutionFunctionInfraCoverageResponse(
+                normalizedDivisionCode,
+                division.getDivisionName(),
+                detectedFunctionCount,
+                connectedFunctionCount,
+                unconnectedFunctionCount,
+                percentage(connectedFunctionCount, detectedFunctionCount));
 
         return new ApiDataResponse<>(response);
     }
@@ -755,6 +886,13 @@ public class BtpSolutionIndustryService {
         return numerator / (double) denominator;
     }
 
+    private Double percentage(int numerator, int denominator) {
+        if (denominator == 0) {
+            return null;
+        }
+        return Math.round(numerator * 1000.0 / denominator) / 10.0;
+    }
+
     private static final RowMapper<InfraHubRow> INFRA_HUB_ROW_MAPPER = (rs, rowNum) -> new InfraHubRow(
             rs.getLong("hub_id"),
             rs.getString("hub_name"),
@@ -799,6 +937,12 @@ public class BtpSolutionIndustryService {
             new EvidenceSummaryRow(
                     rs.getLong("company_count"), rs.getLong("equipment_count"), rs.getLong("hub_count"));
 
+    private static final RowMapper<FunctionInfraCoverageRow> FUNCTION_INFRA_COVERAGE_ROW_MAPPER = (rs, rowNum) ->
+            new FunctionInfraCoverageRow(
+                    rs.getInt("detected_function_count"),
+                    rs.getInt("connected_function_count"),
+                    rs.getInt("unconnected_function_count"));
+
     private static final RowMapper<EvidenceDetailRow> EVIDENCE_DETAIL_ROW_MAPPER = (rs, rowNum) ->
             new EvidenceDetailRow(
                     rs.getInt("company_id"),
@@ -837,6 +981,9 @@ public class BtpSolutionIndustryService {
     private record SampleEquipmentRow(Long hubId, BtpSolutionInfraHubResponse.SampleEquipment sampleEquipment) {}
 
     private record EvidenceSummaryRow(long companyCount, long equipmentCount, long hubCount) {}
+
+    private record FunctionInfraCoverageRow(
+            int detectedFunctionCount, int connectedFunctionCount, int unconnectedFunctionCount) {}
 
     private record EvidenceDetailRow(
             Integer companyId,

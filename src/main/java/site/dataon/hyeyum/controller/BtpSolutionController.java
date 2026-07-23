@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
+import site.dataon.hyeyum.dto.BtpSolutionFunctionInfraCoverageResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
@@ -56,6 +57,19 @@ public class BtpSolutionController {
                     @NotBlank
                     String divisionCode) {
         return industryService.overview(divisionCode);
+    }
+
+    @GetMapping("/industries/{divisionCode}/function-infra-coverage")
+    @Operation(
+            summary = "Get function-infra coverage",
+            description =
+                    "Returns the ratio of detected industry function candidates that have BTP equipment and hub connection evidence.")
+    public ApiDataResponse<BtpSolutionFunctionInfraCoverageResponse> functionInfraCoverage(
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
+                    @NotBlank
+                    String divisionCode) {
+        return industryService.functionInfraCoverage(divisionCode);
     }
 
     @GetMapping("/industries/{divisionCode}/infra-hubs")
