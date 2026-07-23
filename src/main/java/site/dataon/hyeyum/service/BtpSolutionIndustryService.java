@@ -1,8 +1,10 @@
 package site.dataon.hyeyum.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import site.dataon.hyeyum.domain.BtpSolutionIndustryStat;
 import site.dataon.hyeyum.domain.KsicInfo;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
@@ -193,6 +196,196 @@ public class BtpSolutionIndustryService {
                 .toList();
 
         return new ApiDataResponse<>(new BtpSolutionInfraHubResponse(normalizedSectionCode, hubs));
+    }
+
+    public ApiDataResponse<BtpSolutionConnectionEvidenceCompaniesResponse> connectionEvidenceCompanies(
+            String sectionCode, String keyword, Long hubId, int page, int size) {
+        String normalizedSectionCode = normalizeSectionCode(sectionCode);
+        validateSectionCode(normalizedSectionCode, sectionCode);
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        int pageNumber = Math.max(0, page);
+        int pageSize = Math.max(1, Math.min(size, 50));
+        int offset = pageNumber * pageSize;
+
+        EvidenceSummaryRow summary = jdbcTemplate.queryForObject(
+                evidenceCte()
+                        + """
+                        select
+                            count(distinct company_id)::bigint as company_count,
+                            count(distinct equipment_id)::bigint as equipment_count,
+                            count(distinct hub_id)::bigint as hub_count
+                        from matched
+                        where (cast(? as bigint) is null or hub_id = cast(? as bigint))
+                          and (? = '' or lower(company_name) like '%' || lower(?) || '%')
+                        """,
+                EVIDENCE_SUMMARY_ROW_MAPPER,
+                normalizedSectionCode,
+                normalizedSectionCode,
+                hubId,
+                hubId,
+                normalizedKeyword,
+                normalizedKeyword);
+
+        List<Integer> companyIds = jdbcTemplate.query(
+                evidenceCte()
+                        + """
+                        select company_id
+                        from matched
+                        where (cast(? as bigint) is null or hub_id = cast(? as bigint))
+                          and (? = '' or lower(company_name) like '%' || lower(?) || '%')
+                        group by company_id, company_name
+                        order by company_name, company_id
+                        limit ? offset ?
+                        """,
+                (rs, rowNum) -> rs.getInt("company_id"),
+                normalizedSectionCode,
+                normalizedSectionCode,
+                hubId,
+                hubId,
+                normalizedKeyword,
+                normalizedKeyword,
+                pageSize,
+                offset);
+
+        List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> items = companyIds.isEmpty()
+                ? List.of()
+                : evidenceItems(normalizedSectionCode, hubId, companyIds);
+        long totalElements = summary == null ? 0 : summary.companyCount();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil(totalElements / (double) pageSize);
+        BtpSolutionConnectionEvidenceCompaniesResponse.Summary responseSummary =
+                new BtpSolutionConnectionEvidenceCompaniesResponse.Summary(
+                        summary == null ? 0 : summary.companyCount(),
+                        summary == null ? 0 : summary.equipmentCount(),
+                        summary == null ? 0 : summary.hubCount());
+
+        return new ApiDataResponse<>(new BtpSolutionConnectionEvidenceCompaniesResponse(
+                normalizedSectionCode, responseSummary, items, pageNumber, pageSize, totalElements, totalPages));
+    }
+
+    private List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> evidenceItems(
+            String sectionCode, Long hubId, List<Integer> companyIds) {
+        List<Object> args = new ArrayList<>();
+        args.add(sectionCode);
+        args.add(sectionCode);
+        args.add(hubId);
+        args.add(hubId);
+        args.addAll(companyIds);
+
+        List<EvidenceDetailRow> rows = jdbcTemplate.query(
+                evidenceCte()
+                        + """
+                        select
+                            company_id,
+                            company_name,
+                            source_field,
+                            source_text,
+                            keyword,
+                            function_name,
+                            evidence_template,
+                            equipment_id,
+                            equipment_name,
+                            category_large,
+                            hub_id,
+                            hub_name
+                        from matched
+                        where (cast(? as bigint) is null or hub_id = cast(? as bigint))
+                          and company_id in (%s)
+                        order by company_name, company_id, function_name, equipment_name, hub_name
+                        """
+                                .formatted(placeholders(companyIds.size())),
+                EVIDENCE_DETAIL_ROW_MAPPER,
+                args.toArray());
+
+        Map<Integer, CompanyEvidenceBuilder> builders = new LinkedHashMap<>();
+        for (EvidenceDetailRow row : rows) {
+            builders.computeIfAbsent(row.companyId(), id -> new CompanyEvidenceBuilder(id, row.companyName()))
+                    .add(row);
+        }
+        return builders.values().stream().map(CompanyEvidenceBuilder::build).toList();
+    }
+
+    private String evidenceCte() {
+        return """
+                with eligible_companies as (
+                    select distinct
+                        company.company_id,
+                        coalesce(nullif(trim(company.company_name), ''), '기업 #' || company.company_id) as company_name,
+                        company.main_product
+                    from public.company company
+                    left join public.ksic_info company_ksic
+                      on company_ksic.ksic_code = company.ksic_code
+                    left join public.btp_support_history section_history
+                      on section_history.company_id = company.company_id
+                    left join public.ksic_info history_ksic
+                      on history_ksic.ksic_code = section_history.industry_code
+                    where company_ksic.section_code = ?
+                       or history_ksic.section_code = ?
+                ),
+                company_sources as (
+                    select
+                        company_id,
+                        company_name,
+                        '주요제품' as source_field,
+                        main_product as source_text
+                    from eligible_companies
+                    union all
+                    select
+                        history.company_id,
+                        eligible.company_name,
+                        '주요제품' as source_field,
+                        history.main_product as source_text
+                    from public.btp_support_history history
+                    join eligible_companies eligible on eligible.company_id = history.company_id
+                    union all
+                    select
+                        history.company_id,
+                        eligible.company_name,
+                        '지원품목' as source_field,
+                        history.support_item as source_text
+                    from public.btp_support_history history
+                    join eligible_companies eligible on eligible.company_id = history.company_id
+                    union all
+                    select
+                        project.company_id,
+                        eligible.company_name,
+                        'NTIS 과제명' as source_field,
+                        project.project_name as source_text
+                    from public.company_ntis_lead_project project
+                    join eligible_companies eligible on eligible.company_id = project.company_id
+                ),
+                matched as (
+                    select distinct
+                        source.company_id,
+                        source.company_name,
+                        source.source_field,
+                        source.source_text,
+                        rule.keyword,
+                        rule.function_name,
+                        rule.evidence_template,
+                        equipment.id as equipment_id,
+                        equipment.equipment_name,
+                        equipment.category_large,
+                        match.hub_id,
+                        hub.hub_name
+                    from company_sources source
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and source.source_text is not null
+                     and trim(source.source_text) <> ''
+                     and lower(source.source_text) like '%' || lower(rule.keyword) || '%'
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    join public.btp_infra_hub hub
+                      on hub.hub_id = match.hub_id
+                     and hub.active = true
+                )
+                """;
     }
 
     private void validateSectionCode(String normalizedSectionCode, String originalSectionCode) {
@@ -502,6 +695,25 @@ public class BtpSolutionIndustryService {
                             rs.getString("category_large"),
                             rs.getString("location_name")));
 
+    private static final RowMapper<EvidenceSummaryRow> EVIDENCE_SUMMARY_ROW_MAPPER = (rs, rowNum) ->
+            new EvidenceSummaryRow(
+                    rs.getLong("company_count"), rs.getLong("equipment_count"), rs.getLong("hub_count"));
+
+    private static final RowMapper<EvidenceDetailRow> EVIDENCE_DETAIL_ROW_MAPPER = (rs, rowNum) ->
+            new EvidenceDetailRow(
+                    rs.getInt("company_id"),
+                    rs.getString("company_name"),
+                    rs.getString("source_field"),
+                    rs.getString("source_text"),
+                    rs.getString("keyword"),
+                    rs.getString("function_name"),
+                    rs.getString("evidence_template"),
+                    rs.getLong("equipment_id"),
+                    rs.getString("equipment_name"),
+                    rs.getString("category_large"),
+                    rs.getLong("hub_id"),
+                    rs.getString("hub_name"));
+
     private record InfraHubRow(
             Long hubId,
             String hubName,
@@ -523,4 +735,80 @@ public class BtpSolutionIndustryService {
     private record CategoryRow(Long hubId, BtpSolutionInfraHubResponse.CategoryCount category) {}
 
     private record SampleEquipmentRow(Long hubId, BtpSolutionInfraHubResponse.SampleEquipment sampleEquipment) {}
+
+    private record EvidenceSummaryRow(long companyCount, long equipmentCount, long hubCount) {}
+
+    private record EvidenceDetailRow(
+            Integer companyId,
+            String companyName,
+            String sourceField,
+            String sourceText,
+            String keyword,
+            String functionName,
+            String evidenceTemplate,
+            Long equipmentId,
+            String equipmentName,
+            String categoryLarge,
+            Long hubId,
+            String hubName) {}
+
+    private static final class CompanyEvidenceBuilder {
+
+        private final Integer companyId;
+        private final String companyName;
+        private final LinkedHashSet<String> mainProducts = new LinkedHashSet<>();
+        private final LinkedHashSet<String> connectedFunctions = new LinkedHashSet<>();
+        private final LinkedHashMap<Long, BtpSolutionConnectionEvidenceCompaniesResponse.ConnectedEquipment>
+                connectedEquipments = new LinkedHashMap<>();
+        private String evidenceText;
+
+        private CompanyEvidenceBuilder(Integer companyId, String companyName) {
+            this.companyId = companyId;
+            this.companyName = companyName;
+        }
+
+        private CompanyEvidenceBuilder add(EvidenceDetailRow row) {
+            if (("주요제품".equals(row.sourceField()) || "지원품목".equals(row.sourceField()))
+                    && row.sourceText() != null
+                    && !row.sourceText().isBlank()) {
+                mainProducts.add(row.sourceText().trim());
+            }
+            if (row.functionName() != null && !row.functionName().isBlank()) {
+                connectedFunctions.add(row.functionName());
+            }
+            if (connectedEquipments.size() < 5 && !connectedEquipments.containsKey(row.equipmentId())) {
+                connectedEquipments.put(
+                        row.equipmentId(),
+                        new BtpSolutionConnectionEvidenceCompaniesResponse.ConnectedEquipment(
+                                row.equipmentId(),
+                                row.equipmentName(),
+                                row.categoryLarge(),
+                                row.hubId(),
+                                row.hubName()));
+            }
+            if (evidenceText == null) {
+                evidenceText = evidenceText(row);
+            }
+            return this;
+        }
+
+        private BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem build() {
+            return new BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem(
+                    companyId,
+                    companyName,
+                    mainProducts.stream().limit(4).toList(),
+                    connectedFunctions.stream().limit(5).toList(),
+                    connectedEquipments.values().stream().toList(),
+                    evidenceText);
+        }
+
+        private String evidenceText(EvidenceDetailRow row) {
+            String template = row.evidenceTemplate() == null || row.evidenceTemplate().isBlank()
+                    ? "{sourceField} '{keyword}' 표현에서 {functionName} 수요 확인"
+                    : row.evidenceTemplate();
+            return template.replace("{sourceField}", row.sourceField())
+                    .replace("{keyword}", row.keyword())
+                    .replace("{functionName}", row.functionName());
+        }
+    }
 }

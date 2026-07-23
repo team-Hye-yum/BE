@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
@@ -68,5 +69,32 @@ public class BtpSolutionController {
                     @NotBlank
                     String sectionCode) {
         return industryService.infraHubs(sectionCode);
+    }
+
+    @GetMapping("/industries/{sectionCode}/connection-evidence/companies")
+    @Operation(
+            summary = "Get BTP solution company connection evidence",
+            description =
+                    "Returns company-level evidence that connects selected industry companies to equipment and BTP hubs.")
+    public ApiDataResponse<BtpSolutionConnectionEvidenceCompaniesResponse> connectionEvidenceCompanies(
+            @Parameter(description = "KSIC section code", example = "C")
+                    @PathVariable("sectionCode")
+                    @NotBlank
+                    String sectionCode,
+            @Parameter(description = "Company name keyword", example = "조선")
+                    @RequestParam(value = "keyword", defaultValue = "")
+                    String keyword,
+            @Parameter(description = "Hub id filter", example = "1")
+                    @RequestParam(value = "hubId", required = false)
+                    Long hubId,
+            @Parameter(description = "Page number starting from 0", example = "0")
+                    @RequestParam(value = "page", defaultValue = "0")
+                    @Min(0)
+                    int page,
+            @Parameter(description = "Page size", example = "10")
+                    @RequestParam(value = "size", defaultValue = "10")
+                    @Min(1)
+                    int size) {
+        return industryService.connectionEvidenceCompanies(sectionCode, keyword, hubId, page, size);
     }
 }
