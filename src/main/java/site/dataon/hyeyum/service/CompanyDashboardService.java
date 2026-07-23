@@ -539,6 +539,9 @@ public class CompanyDashboardService {
                 formatDate(history.getStartDate()),
                 formatDate(history.getEndDate()),
                 history.getSupportAmount(),
+                MoneyUnits.KRW_THOUSAND,
+                markerYear,
+                markerMonth(history),
                 new MetricsAtMarker(
                         markerFinancial == null ? null : markerFinancial.getResearchAndDevelopmentExpense(),
                         markerFinancial == null ? null : round(markerFinancial.getOperatingMargin()),
@@ -550,6 +553,10 @@ public class CompanyDashboardService {
             return history.getStartDate().getYear();
         }
         return history.getSupportYear();
+    }
+
+    private Integer markerMonth(BtpSupportHistory history) {
+        return history.getStartDate() == null ? null : history.getStartDate().getMonthValue();
     }
 
     private ObservedFlow observedFlow(

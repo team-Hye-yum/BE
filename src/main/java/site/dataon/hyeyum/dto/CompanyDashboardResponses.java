@@ -159,6 +159,9 @@ public final class CompanyDashboardResponses {
             String startDate,
             String endDate,
             Integer supportAmount,
+            String supportAmountUnit,
+            Integer markerYear,
+            Integer markerMonth,
             MetricsAtMarker metricsAtMarker) {}
 
     public record MetricsAtMarker(
