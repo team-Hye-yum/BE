@@ -48,6 +48,14 @@ public class OpenApiConfig {
     }
 
     @Bean
+    public GroupedOpenApi btpSolutionApi() {
+        return GroupedOpenApi.builder()
+                .group("btp-solution")
+                .pathsToMatch("/btp-solution/**")
+                .build();
+    }
+
+    @Bean
     public GroupedOpenApi adminImportsApi() {
         return GroupedOpenApi.builder()
                 .group("admin-imports")

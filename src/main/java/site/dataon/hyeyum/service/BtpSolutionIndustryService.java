@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,16 @@ public class BtpSolutionIndustryService {
     private static final String ORGANIZATION_FORM = "ORGANIZATION_FORM";
     private static final List<String> EMPLOYEE_SIZE_BUCKETS =
             List.of("1~4인", "5~9인", "10~49인", "50~299인", "300인 이상");
+    private static final Map<String, String> BUSAN_EMPLOYEE_SIZE_BUCKET_MAP = Map.ofEntries(
+            Map.entry("1 - 4명", "1~4인"),
+            Map.entry("5 - 9명", "5~9인"),
+            Map.entry("10 - 19명", "10~49인"),
+            Map.entry("20 - 49명", "10~49인"),
+            Map.entry("50 - 99명", "50~299인"),
+            Map.entry("100 - 299명", "50~299인"),
+            Map.entry("300 - 499명", "300인 이상"),
+            Map.entry("500 - 999명", "300인 이상"),
+            Map.entry("1000명 이상", "300인 이상"));
 
     private final KsicInfoRepository ksicInfoRepository;
     private final BtpSolutionIndustryStatRepository industryStatRepository;
@@ -142,18 +153,23 @@ public class BtpSolutionIndustryService {
         }
         List<BtpSolutionIndustryStat> stats =
                 industryStatRepository.findBusanOrganizationStats(sectionCode, busanBaseYear);
-        int total = sumEstablishments(stats);
+        int total = stats.stream()
+                .filter(stat -> !"계".equals(stat.getDimensionName()))
+                .map(BtpSolutionIndustryStat::getEstablishmentCount)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
         if (total == 0) {
             return new BtpSolutionIndustryOverviewResponse.RatioPair(null, null);
         }
         int corporation = stats.stream()
-                .filter(stat -> containsAny(stat.getDimensionName(), "회사법인", "회사이외법인", "법인"))
+                .filter(stat -> containsAny(stat.getDimensionName(), "회사법인", "회사이외법인"))
                 .map(BtpSolutionIndustryStat::getEstablishmentCount)
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
                 .sum();
         int individual = stats.stream()
-                .filter(stat -> containsAny(stat.getDimensionName(), "개인"))
+                .filter(stat -> containsAny(stat.getDimensionName(), "개인사업체"))
                 .map(BtpSolutionIndustryStat::getEstablishmentCount)
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
@@ -192,11 +208,12 @@ public class BtpSolutionIndustryService {
         if (busanBaseYear == null) {
             return Map.of();
         }
-        return industryStatRepository.findBusanEmployeeSizeStats(sectionCode, busanBaseYear, EMPLOYEE_SIZE_BUCKETS)
+        return industryStatRepository.findBusanEmployeeSizeStats(sectionCode, busanBaseYear)
                 .stream()
                 .filter(stat -> stat.getEstablishmentCount() != null)
-                .collect(java.util.stream.Collectors.toMap(
-                        BtpSolutionIndustryStat::getDimensionName,
+                .filter(stat -> BUSAN_EMPLOYEE_SIZE_BUCKET_MAP.containsKey(stat.getDimensionName()))
+                .collect(Collectors.toMap(
+                        stat -> BUSAN_EMPLOYEE_SIZE_BUCKET_MAP.get(stat.getDimensionName()),
                         BtpSolutionIndustryStat::getEstablishmentCount,
                         Integer::sum));
     }
@@ -212,16 +229,8 @@ public class BtpSolutionIndustryService {
         return stats.stream()
                 .filter(stat -> stat.getName() != null)
                 .filter(stat -> stat.getCount() != null)
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                         BtpCompanyBucketProjection::getName, BtpCompanyBucketProjection::getCount, Integer::sum));
-    }
-
-    private int sumEstablishments(List<BtpSolutionIndustryStat> stats) {
-        return stats.stream()
-                .map(BtpSolutionIndustryStat::getEstablishmentCount)
-                .filter(Objects::nonNull)
-                .mapToInt(Integer::intValue)
-                .sum();
     }
 
     private int sumBuckets(List<BtpCompanyBucketProjection> stats) {

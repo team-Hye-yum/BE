@@ -1,6 +1,5 @@
 package site.dataon.hyeyum.repository;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -41,12 +40,9 @@ public interface BtpSolutionIndustryStatRepository extends JpaRepository<BtpSolu
               and s.statCategory = 'EMPLOYEE_SIZE'
               and s.regionName = '부산 전체'
               and s.middleIndustryName = ''
-              and s.dimensionName in :dimensionNames
             """)
     List<BtpSolutionIndustryStat> findBusanEmployeeSizeStats(
-            @Param("sectionCode") String sectionCode,
-            @Param("year") Integer year,
-            @Param("dimensionNames") Collection<String> dimensionNames);
+            @Param("sectionCode") String sectionCode, @Param("year") Integer year);
 
     @Query(
             """
@@ -55,8 +51,7 @@ public interface BtpSolutionIndustryStatRepository extends JpaRepository<BtpSolu
             where s.sectionCode = :sectionCode
               and s.year = :year
               and s.statCategory = 'ORGANIZATION_FORM'
-              and s.regionName = '부산 전체'
-              and s.middleIndustryName = ''
+              and s.regionName in ('부산 전체', '전체')
             """)
     List<BtpSolutionIndustryStat> findBusanOrganizationStats(
             @Param("sectionCode") String sectionCode, @Param("year") Integer year);
