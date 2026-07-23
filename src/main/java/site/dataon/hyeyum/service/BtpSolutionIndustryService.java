@@ -1,16 +1,23 @@
 package site.dataon.hyeyum.service;
 
+import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import site.dataon.hyeyum.domain.BtpSolutionIndustryStat;
 import site.dataon.hyeyum.domain.KsicInfo;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
@@ -45,16 +52,19 @@ public class BtpSolutionIndustryService {
     private final BtpSolutionIndustryStatRepository industryStatRepository;
     private final BtpSolutionCompanyStatRepository companyStatRepository;
     private final KsicIndustryElasticsearchService elasticsearchService;
+    private final JdbcTemplate jdbcTemplate;
 
     public BtpSolutionIndustryService(
             KsicInfoRepository ksicInfoRepository,
             BtpSolutionIndustryStatRepository industryStatRepository,
             BtpSolutionCompanyStatRepository companyStatRepository,
-            KsicIndustryElasticsearchService elasticsearchService) {
+            KsicIndustryElasticsearchService elasticsearchService,
+            JdbcTemplate jdbcTemplate) {
         this.ksicInfoRepository = ksicInfoRepository;
         this.industryStatRepository = industryStatRepository;
         this.companyStatRepository = companyStatRepository;
         this.elasticsearchService = elasticsearchService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public ApiDataResponse<KsicIndustrySearchResponse> searchIndustries(String keyword, int limit) {
@@ -112,6 +122,86 @@ public class BtpSolutionIndustryService {
         return new ApiDataResponse<>(response);
     }
 
+    public ApiDataResponse<BtpSolutionInfraHubResponse> infraHubs(String sectionCode) {
+        String normalizedSectionCode = normalizeSectionCode(sectionCode);
+        validateSectionCode(normalizedSectionCode, sectionCode);
+
+        List<InfraHubRow> hubRows = jdbcTemplate.query(
+                """
+                select
+                    hub.hub_id,
+                    hub.hub_name,
+                    hub.hub_kind,
+                    hub.center_name,
+                    hub.summary,
+                    hub.address,
+                    hub.district_name,
+                    hub.tel,
+                    hub.latitude,
+                    hub.longitude,
+                    hub.image_url,
+                    hub.space_url,
+                    hub.directions_url,
+                    coalesce(count(distinct match.equipment_id), 0)::int as equipment_count
+                from public.btp_infra_hub hub
+                left join public.v_btp_equipment_hub_match match
+                  on match.hub_id = hub.hub_id
+                where hub.active = true
+                group by
+                    hub.hub_id,
+                    hub.hub_name,
+                    hub.hub_kind,
+                    hub.center_name,
+                    hub.summary,
+                    hub.address,
+                    hub.district_name,
+                    hub.tel,
+                    hub.latitude,
+                    hub.longitude,
+                    hub.image_url,
+                    hub.space_url,
+                    hub.directions_url,
+                    hub.display_order
+                order by hub.display_order, hub.hub_id
+                """,
+                INFRA_HUB_ROW_MAPPER);
+
+        Set<Long> hubIds = hubRows.stream().map(InfraHubRow::hubId).collect(Collectors.toSet());
+        Map<Long, List<BtpSolutionInfraHubResponse.Facility>> facilitiesByHub = facilitiesByHub(hubIds);
+        Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> categoriesByHub = topCategoriesByHub(hubIds);
+        Map<Long, List<BtpSolutionInfraHubResponse.SampleEquipment>> samplesByHub = sampleEquipmentsByHub(hubIds);
+
+        List<BtpSolutionInfraHubResponse.InfraHub> hubs = hubRows.stream()
+                .map(row -> new BtpSolutionInfraHubResponse.InfraHub(
+                        row.hubId(),
+                        row.hubName(),
+                        row.hubKind(),
+                        row.centerName(),
+                        row.summary(),
+                        row.address(),
+                        row.districtName(),
+                        row.tel(),
+                        row.latitude(),
+                        row.longitude(),
+                        row.imageUrl(),
+                        row.spaceUrl(),
+                        row.directionsUrl(),
+                        row.equipmentCount(),
+                        categoriesByHub.getOrDefault(row.hubId(), List.of()),
+                        samplesByHub.getOrDefault(row.hubId(), List.of()),
+                        facilitiesByHub.getOrDefault(row.hubId(), List.of())))
+                .toList();
+
+        return new ApiDataResponse<>(new BtpSolutionInfraHubResponse(normalizedSectionCode, hubs));
+    }
+
+    private void validateSectionCode(String normalizedSectionCode, String originalSectionCode) {
+        ksicInfoRepository
+                .findFirstBySectionCodeOrderByDivisionCodeAscGroupCodeAscClassCodeAscSubclassCodeAsc(
+                        normalizedSectionCode)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown KSIC section code: " + originalSectionCode));
+    }
+
     private KsicIndustrySearchItem mapSearchItem(KsicInfo ksicInfo) {
         return new KsicIndustrySearchItem(
                 ksicInfo.getKsicCode(),
@@ -144,6 +234,114 @@ public class BtpSolutionIndustryService {
             throw new IllegalArgumentException("sectionCode must not be blank.");
         }
         return normalized;
+    }
+
+    private Map<Long, List<BtpSolutionInfraHubResponse.Facility>> facilitiesByHub(Set<Long> hubIds) {
+        if (hubIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbcTemplate.query(
+                        """
+                        select
+                            hub_id,
+                            facility_id,
+                            site_name,
+                            building_no,
+                            building_name,
+                            gross_floor_area,
+                            floors,
+                            purpose
+                        from public.btp_infra_hub_facility
+                        where hub_id in (%s)
+                        order by hub_id, display_order, facility_id
+                        """
+                                .formatted(placeholders(hubIds.size())),
+                        FACILITY_ROW_MAPPER,
+                        hubIds.toArray())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        FacilityRow::hubId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(FacilityRow::facility, Collectors.toList())));
+    }
+
+    private Map<Long, List<BtpSolutionInfraHubResponse.CategoryCount>> topCategoriesByHub(Set<Long> hubIds) {
+        if (hubIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbcTemplate.query(
+                        """
+                        with category_counts as (
+                            select
+                                match.hub_id,
+                                coalesce(equipment.category_large, '미분류') as name,
+                                count(*)::int as count
+                            from public.v_btp_equipment_hub_match match
+                            join public.btp_equipment equipment on equipment.id = match.equipment_id
+                            where match.hub_id in (%s)
+                            group by match.hub_id, coalesce(equipment.category_large, '미분류')
+                        ),
+                        ranked as (
+                            select
+                                hub_id,
+                                name,
+                                count,
+                                row_number() over (partition by hub_id order by count desc, name) as rank
+                            from category_counts
+                        )
+                        select hub_id, name, count
+                        from ranked
+                        where rank <= 5
+                        order by hub_id, rank
+                        """
+                                .formatted(placeholders(hubIds.size())),
+                        CATEGORY_ROW_MAPPER,
+                        hubIds.toArray())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        CategoryRow::hubId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(CategoryRow::category, Collectors.toList())));
+    }
+
+    private Map<Long, List<BtpSolutionInfraHubResponse.SampleEquipment>> sampleEquipmentsByHub(Set<Long> hubIds) {
+        if (hubIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbcTemplate.query(
+                        """
+                        with ranked as (
+                            select
+                                match.hub_id,
+                                equipment.id as equipment_id,
+                                equipment.equipment_name,
+                                equipment.category_large,
+                                equipment.location_name,
+                                row_number() over (
+                                    partition by match.hub_id
+                                    order by equipment.id
+                                ) as rank
+                            from public.v_btp_equipment_hub_match match
+                            join public.btp_equipment equipment on equipment.id = match.equipment_id
+                            where match.hub_id in (%s)
+                        )
+                        select hub_id, equipment_id, equipment_name, category_large, location_name
+                        from ranked
+                        where rank <= 5
+                        order by hub_id, rank
+                        """
+                                .formatted(placeholders(hubIds.size())),
+                        SAMPLE_EQUIPMENT_ROW_MAPPER,
+                        hubIds.toArray())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        SampleEquipmentRow::hubId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(SampleEquipmentRow::sampleEquipment, Collectors.toList())));
+    }
+
+    private String placeholders(int count) {
+        return String.join(",", Collections.nCopies(count, "?"));
     }
 
     private BtpSolutionIndustryOverviewResponse.RatioPair busanBusinessTypeRatio(
@@ -263,4 +461,66 @@ public class BtpSolutionIndustryService {
         }
         return numerator / (double) denominator;
     }
+
+    private static final RowMapper<InfraHubRow> INFRA_HUB_ROW_MAPPER = (rs, rowNum) -> new InfraHubRow(
+            rs.getLong("hub_id"),
+            rs.getString("hub_name"),
+            rs.getString("hub_kind"),
+            rs.getString("center_name"),
+            rs.getString("summary"),
+            rs.getString("address"),
+            rs.getString("district_name"),
+            rs.getString("tel"),
+            rs.getBigDecimal("latitude"),
+            rs.getBigDecimal("longitude"),
+            rs.getString("image_url"),
+            rs.getString("space_url"),
+            rs.getString("directions_url"),
+            rs.getInt("equipment_count"));
+
+    private static final RowMapper<FacilityRow> FACILITY_ROW_MAPPER = (rs, rowNum) -> new FacilityRow(
+            rs.getLong("hub_id"),
+            new BtpSolutionInfraHubResponse.Facility(
+                    rs.getLong("facility_id"),
+                    rs.getString("site_name"),
+                    rs.getString("building_no"),
+                    rs.getString("building_name"),
+                    rs.getString("gross_floor_area"),
+                    rs.getString("floors"),
+                    rs.getString("purpose")));
+
+    private static final RowMapper<CategoryRow> CATEGORY_ROW_MAPPER = (rs, rowNum) -> new CategoryRow(
+            rs.getLong("hub_id"),
+            new BtpSolutionInfraHubResponse.CategoryCount(rs.getString("name"), rs.getInt("count")));
+
+    private static final RowMapper<SampleEquipmentRow> SAMPLE_EQUIPMENT_ROW_MAPPER = (rs, rowNum) ->
+            new SampleEquipmentRow(
+                    rs.getLong("hub_id"),
+                    new BtpSolutionInfraHubResponse.SampleEquipment(
+                            rs.getLong("equipment_id"),
+                            rs.getString("equipment_name"),
+                            rs.getString("category_large"),
+                            rs.getString("location_name")));
+
+    private record InfraHubRow(
+            Long hubId,
+            String hubName,
+            String hubKind,
+            String centerName,
+            String summary,
+            String address,
+            String districtName,
+            String tel,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            String imageUrl,
+            String spaceUrl,
+            String directionsUrl,
+            Integer equipmentCount) {}
+
+    private record FacilityRow(Long hubId, BtpSolutionInfraHubResponse.Facility facility) {}
+
+    private record CategoryRow(Long hubId, BtpSolutionInfraHubResponse.CategoryCount category) {}
+
+    private record SampleEquipmentRow(Long hubId, BtpSolutionInfraHubResponse.SampleEquipment sampleEquipment) {}
 }

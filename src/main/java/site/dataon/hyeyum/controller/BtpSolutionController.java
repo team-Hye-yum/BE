@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
 import site.dataon.hyeyum.service.BtpSolutionIndustryService;
@@ -54,5 +55,18 @@ public class BtpSolutionController {
                     @NotBlank
                     String sectionCode) {
         return industryService.overview(sectionCode);
+    }
+
+    @GetMapping("/industries/{sectionCode}/infra-hubs")
+    @Operation(
+            summary = "Get BTP infrastructure hubs",
+            description =
+                    "Returns official BTP hubs with equipment counts, top equipment categories, sample equipment, and facility details.")
+    public ApiDataResponse<BtpSolutionInfraHubResponse> infraHubs(
+            @Parameter(description = "KSIC section code", example = "C")
+                    @PathVariable("sectionCode")
+                    @NotBlank
+                    String sectionCode) {
+        return industryService.infraHubs(sectionCode);
     }
 }
