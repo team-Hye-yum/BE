@@ -149,9 +149,6 @@ public class BtpSolutionIndustryService {
                 division.getDivisionName(),
                 18.4,
                 31.0,
-                "관찰 구간",
-                "KSIC 중분류",
-                7,
                 2024);
 
         return new ApiDataResponse<>(response);
@@ -435,22 +432,20 @@ public class BtpSolutionIndustryService {
                         "전동화 전력반도체 테스트베드 기업지원",
                         2026,
                         "현재 접수중",
-                        "인프라 이용 승인형",
                         "전력반도체 시험·인증",
                         "시제품 성능평가, 신뢰성 시험, 장비 활용 지원",
-                        true,
                         "공고문에 직접 명시",
+                        "반도체 상용화센터 · 반도체 공정 평가 장비",
                         "https://example.com/btp/support-programs/101"),
                 new BtpSolutionRelatedSupportProgramsResponse.Item(
                         102L,
                         "현장솔루션랩 참여기업 모집",
                         2025,
                         "과거 지원이력",
-                        "컨설팅 매칭형",
                         "제조 현장 개선",
                         "현장 진단, 공정 개선 컨설팅, 기술 전문가 매칭",
-                        false,
                         "상위 분류 기준 연결",
+                        "유기소재분석센터 · 재료분석 장비",
                         "https://example.com/btp/support-programs/102"));
 
         return new ApiDataResponse<>(new BtpSolutionRelatedSupportProgramsResponse(items));

@@ -9,10 +9,9 @@ public record BtpSolutionRelatedSupportProgramsResponse(List<Item> items) {
             String title,
             Integer year,
             String status,
-            String supportMethod,
             String supportField,
             String supportContent,
-            Boolean infraLinked,
             String connectionBasis,
+            String linkedEquipment,
             String sourceUrl) {}
 }
