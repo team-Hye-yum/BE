@@ -1029,6 +1029,24 @@ public class BtpSolutionIndustryService {
                       on match.equipment_id = equipment.id
                     group by source.division_code, rule.function_name
                 ),
+                rule_connected as (
+                    select
+                        rule.division_code,
+                        rule.function_name,
+                        true as connected
+                    from public.btp_connection_keyword_rule rule
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    where rule.active = true
+                      and rule.reviewed = true
+                      and rule.division_code is not null
+                    group by rule.division_code, rule.function_name
+                ),
                 unconnected as (
                     select
                         source.division_code,
@@ -1055,14 +1073,24 @@ public class BtpSolutionIndustryService {
                 detected as (
                     select division_code, function_name, connected from connected
                     union all
+                    select division_code, function_name, connected from rule_connected
+                    union all
                     select division_code, function_name, connected from unconnected
+                ),
+                deduplicated as (
+                    select
+                        division_code,
+                        function_name,
+                        bool_or(connected) as connected
+                    from detected
+                    group by division_code, function_name
                 )
                 select
                     division_code,
                     count(*)::int as detected_function_count,
                     count(*) filter (where connected)::int as connected_function_count,
                     count(*) filter (where not connected)::int as unconnected_function_count
-                from detected
+                from deduplicated
                 group by division_code
                 """;
     }
