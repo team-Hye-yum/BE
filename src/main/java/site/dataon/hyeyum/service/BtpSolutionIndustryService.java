@@ -41,7 +41,10 @@ public class BtpSolutionIndustryService {
     private static final Logger log = LoggerFactory.getLogger(BtpSolutionIndustryService.class);
     private static final String BUSAN_TOTAL = "부산 전체";
     private static final String EMPLOYEE_SIZE = "EMPLOYEE_SIZE";
+    private static final String EMPLOYMENT_STATUS = "EMPLOYMENT_STATUS";
     private static final String ORGANIZATION_FORM = "ORGANIZATION_FORM";
+    private static final int EMPLOYEE_GROWTH_START_YEAR = 2023;
+    private static final int EMPLOYEE_GROWTH_END_YEAR = 2024;
     private static final List<String> EMPLOYEE_SIZE_BUCKETS =
             List.of("1~4인", "5~9인", "10~49인", "50~299인", "300인 이상");
     private static final Map<String, String> BUSAN_EMPLOYEE_SIZE_BUCKET_MAP = Map.ofEntries(
@@ -93,15 +96,57 @@ public class BtpSolutionIndustryService {
     }
 
     public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix() {
-        List<BtpSolutionInfraConnectionMatrixResponse.Item> items = List.of(
-                new BtpSolutionInfraConnectionMatrixResponse.Item("10", "식료품 제조업", -8.2, 46.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("13", "섬유제품 제조업", -2.1, 62.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("20", "화학물질 제조업", 3.4, 21.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("25", "금속가공제품 제조업", 10.2, 74.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("26", "전자부품 제조업", 23.8, 38.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("28", "전기장비 제조업", 12.7, 53.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("29", "기타 기계 및 장비 제조업", 18.4, 31.0),
-                new BtpSolutionInfraConnectionMatrixResponse.Item("30", "자동차 및 트레일러 제조업", 5.6, 68.0));
+        List<BtpSolutionInfraConnectionMatrixResponse.Item> items = jdbcTemplate.query(
+                """
+                with employment as (
+                    select
+                        ksic.division_code,
+                        ksic.division_name,
+                        sum(stat.employee_count) filter (where stat.year = ?) as start_employee_count,
+                        sum(stat.employee_count) filter (where stat.year = ?) as end_employee_count
+                    from public.btp_solution_industry_stat stat
+                    join (
+                        select distinct division_code, division_name
+                        from public.ksic_info
+                        where division_code is not null
+                    ) ksic on ksic.division_name = stat.middle_industry_name
+                    where stat.stat_category = ?
+                      and stat.region_name = ?
+                      and stat.dimension_name = '계'
+                      and stat.year in (?, ?)
+                    group by ksic.division_code, ksic.division_name
+                ),
+                coverage as (
+                %s
+                )
+                select
+                    employment.division_code,
+                    employment.division_name,
+                    case
+                        when employment.start_employee_count is null or employment.start_employee_count = 0
+                            then null
+                        else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
+                            / employment.start_employee_count)) / 10.0
+                    end as employee_growth_rate,
+                    case
+                        when coverage.detected_function_count is null or coverage.detected_function_count = 0
+                            then 0.0
+                        else round(coverage.connected_function_count * 1000.0
+                            / coverage.detected_function_count) / 10.0
+                    end as connection_rate
+                from employment
+                left join coverage on coverage.division_code = employment.division_code
+                where employment.start_employee_count is not null
+                  and employment.end_employee_count is not null
+                order by employment.division_code
+                """.formatted(functionInfraCoverageByDivisionSql()),
+                INFRA_CONNECTION_MATRIX_ROW_MAPPER,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR,
+                EMPLOYMENT_STATUS,
+                BUSAN_TOTAL,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR);
 
         return new ApiDataResponse<>(new BtpSolutionInfraConnectionMatrixResponse(items));
     }
@@ -144,12 +189,63 @@ public class BtpSolutionIndustryService {
 
     public ApiDataResponse<BtpSolutionInfraConnectionPositionResponse> infraConnectionPosition(String divisionCode) {
         KsicInfo division = findDivision(divisionCode);
+        List<IndustryPositionRow> positions = jdbcTemplate.query(
+                """
+                with employment as (
+                    select
+                        ksic.division_code,
+                        ksic.division_name,
+                        sum(stat.employee_count) filter (where stat.year = ?) as start_employee_count,
+                        sum(stat.employee_count) filter (where stat.year = ?) as end_employee_count
+                    from public.btp_solution_industry_stat stat
+                    join (
+                        select distinct division_code, division_name
+                        from public.ksic_info
+                        where division_code is not null
+                    ) ksic on ksic.division_name = stat.middle_industry_name
+                    where stat.stat_category = ?
+                      and stat.region_name = ?
+                      and stat.dimension_name = '계'
+                      and stat.year in (?, ?)
+                      and ksic.division_code = ?
+                    group by ksic.division_code, ksic.division_name
+                ),
+                coverage as (
+                %s
+                )
+                select
+                    employment.division_code,
+                    employment.division_name,
+                    case
+                        when employment.start_employee_count is null or employment.start_employee_count = 0
+                            then null
+                        else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
+                            / employment.start_employee_count)) / 10.0
+                    end as employee_growth_rate,
+                    case
+                        when coverage.detected_function_count is null or coverage.detected_function_count = 0
+                            then 0.0
+                        else round(coverage.connected_function_count * 1000.0
+                            / coverage.detected_function_count) / 10.0
+                    end as connection_rate
+                from employment
+                left join coverage on coverage.division_code = employment.division_code
+                """.formatted(functionInfraCoverageByDivisionSql()),
+                INDUSTRY_POSITION_ROW_MAPPER,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR,
+                EMPLOYMENT_STATUS,
+                BUSAN_TOTAL,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR,
+                division.getDivisionCode());
+        IndustryPositionRow position = positions.isEmpty() ? null : positions.get(0);
         BtpSolutionInfraConnectionPositionResponse response = new BtpSolutionInfraConnectionPositionResponse(
-                division.getDivisionCode(),
-                division.getDivisionName(),
-                18.4,
-                31.0,
-                2024);
+                position == null ? division.getDivisionCode() : position.divisionCode(),
+                position == null ? division.getDivisionName() : position.divisionName(),
+                position == null ? null : position.employeeGrowthRate(),
+                position == null ? 0.0 : position.connectionRate(),
+                EMPLOYEE_GROWTH_END_YEAR);
 
         return new ApiDataResponse<>(response);
     }
@@ -823,6 +919,113 @@ public class BtpSolutionIndustryService {
                         Collectors.mapping(SampleEquipmentRow::sampleEquipment, Collectors.toList())));
     }
 
+    private String functionInfraCoverageByDivisionSql() {
+        return """
+                with sources as (
+                    select
+                        ksic.division_code,
+                        'company.main_product' as source_field,
+                        company.main_product as source_text
+                    from public.company company
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.division_code is not null
+                    union all
+                    select
+                        ksic.division_code,
+                        'history.main_product' as source_field,
+                        history.main_product as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.division_code is not null
+                    union all
+                    select
+                        ksic.division_code,
+                        'history.support_item' as source_field,
+                        history.support_item as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.division_code is not null
+                    union all
+                    select
+                        ksic.division_code,
+                        'ntis.project_name' as source_field,
+                        project.project_name as source_text
+                    from public.company_ntis_lead_project project
+                    join public.company company on company.company_id = project.company_id
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.division_code is not null
+                ),
+                cleaned as (
+                    select
+                        division_code,
+                        source_field,
+                        trim(source_text) as source_text,
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g')) as normalized_text
+                    from sources
+                    where source_text is not null
+                      and trim(source_text) <> ''
+                    group by
+                        division_code,
+                        source_field,
+                        trim(source_text),
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g'))
+                ),
+                connected as (
+                    select
+                        source.division_code,
+                        rule.function_name,
+                        true as connected
+                    from cleaned source
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    group by source.division_code, rule.function_name
+                ),
+                unconnected as (
+                    select
+                        source.division_code,
+                        source.source_text as function_name,
+                        false as connected
+                    from cleaned source
+                    where source.source_field in ('company.main_product', 'history.main_product')
+                      and not exists (
+                          select 1
+                          from public.btp_connection_keyword_rule rule
+                          where rule.active = true
+                            and rule.reviewed = true
+                            and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                      )
+                      and length(source.normalized_text) >= 3
+                      and source.normalized_text not like '%지원%'
+                      and source.normalized_text not like '%사업%'
+                      and source.normalized_text not like '%구축%'
+                      and source.normalized_text not like '%인건비%'
+                      and source.normalized_text not like '%인센티브%'
+                    group by source.division_code, source.source_text
+                ),
+                detected as (
+                    select division_code, function_name, connected from connected
+                    union all
+                    select division_code, function_name, connected from unconnected
+                )
+                select
+                    division_code,
+                    count(*)::int as detected_function_count,
+                    count(*) filter (where connected)::int as connected_function_count,
+                    count(*) filter (where not connected)::int as unconnected_function_count
+                from detected
+                group by division_code
+                """;
+    }
+
     private String placeholders(int count) {
         return String.join(",", Collections.nCopies(count, "?"));
     }
@@ -949,6 +1152,11 @@ public class BtpSolutionIndustryService {
         return Math.round(numerator * 1000.0 / denominator) / 10.0;
     }
 
+    private static Double nullableDouble(java.sql.ResultSet rs, String columnLabel) throws java.sql.SQLException {
+        double value = rs.getDouble(columnLabel);
+        return rs.wasNull() ? null : value;
+    }
+
     private static final RowMapper<InfraHubRow> INFRA_HUB_ROW_MAPPER = (rs, rowNum) -> new InfraHubRow(
             rs.getLong("hub_id"),
             rs.getString("hub_name"),
@@ -999,6 +1207,20 @@ public class BtpSolutionIndustryService {
                     rs.getInt("connected_function_count"),
                     rs.getInt("unconnected_function_count"));
 
+    private static final RowMapper<BtpSolutionInfraConnectionMatrixResponse.Item>
+            INFRA_CONNECTION_MATRIX_ROW_MAPPER = (rs, rowNum) -> new BtpSolutionInfraConnectionMatrixResponse.Item(
+                    rs.getString("division_code"),
+                    rs.getString("division_name"),
+                    nullableDouble(rs, "employee_growth_rate"),
+                    nullableDouble(rs, "connection_rate"));
+
+    private static final RowMapper<IndustryPositionRow> INDUSTRY_POSITION_ROW_MAPPER = (rs, rowNum) ->
+            new IndustryPositionRow(
+                    rs.getString("division_code"),
+                    rs.getString("division_name"),
+                    nullableDouble(rs, "employee_growth_rate"),
+                    nullableDouble(rs, "connection_rate"));
+
     private static final RowMapper<EvidenceDetailRow> EVIDENCE_DETAIL_ROW_MAPPER = (rs, rowNum) ->
             new EvidenceDetailRow(
                     rs.getInt("company_id"),
@@ -1040,6 +1262,9 @@ public class BtpSolutionIndustryService {
 
     private record FunctionInfraCoverageRow(
             int detectedFunctionCount, int connectedFunctionCount, int unconnectedFunctionCount) {}
+
+    private record IndustryPositionRow(
+            String divisionCode, String divisionName, Double employeeGrowthRate, Double connectionRate) {}
 
     private record EvidenceDetailRow(
             Integer companyId,
