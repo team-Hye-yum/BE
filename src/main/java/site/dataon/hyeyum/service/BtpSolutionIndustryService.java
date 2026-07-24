@@ -144,14 +144,7 @@ public class BtpSolutionIndustryService {
                     division_code,
                     division_name,
                     employee_growth_rate,
-                    case
-                        when count(*) over () <= 1 then 50.0
-                        else round((
-                            5.0
-                            + 90.0 * (row_number() over (order by raw_connection_rate, division_code) - 1)::numeric
-                                / nullif(count(*) over () - 1, 0)
-                        ) * 10.0) / 10.0
-                    end as connection_rate
+                    greatest(0.0, least(100.0, round(raw_connection_rate * 10.0) / 10.0)) as connection_rate
                 from scored
                 order by division_code
                 """.formatted(functionInfraCoverageByDivisionSql()),
@@ -318,6 +311,34 @@ public class BtpSolutionIndustryService {
                     from direct_evidence
                     group by group_code
                 ),
+                direct_equipment_counts as (
+                    select
+                        source.group_code,
+                        count(distinct equipment.id)::int as connected_equipment_count
+                    from direct_cleaned source
+                    join group_scope scope on scope.group_code = source.group_code
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = scope.division_code
+                     and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                     and rule.equipment_category_large is not null
+                     and rule.equipment_category_middle is not null
+                     and rule.keyword not in (
+                         '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                         '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                         '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                     )
+                    join public.btp_equipment equipment
+                      on equipment.category_large = rule.equipment_category_large
+                     and equipment.category_middle = rule.equipment_category_middle
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    join public.btp_infra_hub hub
+                      on hub.hub_id = match.hub_id
+                     and hub.active = true
+                    group by source.group_code
+                ),
                 group_rule_stats as (
                     select
                         scope.group_code,
@@ -369,6 +390,10 @@ public class BtpSolutionIndustryService {
                     from group_rule_stats
                     cross join division_rule_stats
                 ),
+                max_equipment_counts as (
+                    select greatest(max(connected_equipment_count), 1) as max_connected_equipment_count
+                    from direct_equipment_counts
+                ),
                 scored as (
                     select
                         scope.group_code as division_code,
@@ -379,33 +404,23 @@ public class BtpSolutionIndustryService {
                             else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
                                 / employment.start_employee_count)) / 10.0
                         end as employee_growth_rate,
-                        (
-                            coalesce(direct.connected_function_count, 0)::numeric
-                            + 3.0 * 0.30 * (
-                                0.80 * coalesce(group_rule.avg_confidence, division_rule.avg_confidence, 0) * (
-                                    0.80 * ln(1 + coalesce(group_rule.rule_function_count, 0))
-                                        / nullif(ln(1 + max_rule.max_group_function_count), 0)
-                                    + 0.20 * (
-                                        1 - ln(1 + coalesce(group_rule.category_pair_count, 0))
-                                            / nullif(ln(1 + max_rule.max_group_category_pair_count), 0)
-                                    )
-                                )
-                                + 0.20 * coalesce(division_rule.avg_confidence, 0)
-                                    * ln(1 + coalesce(division_rule.rule_function_count, 0))
-                                    / nullif(ln(1 + max_rule.max_division_function_count), 0)
-                            )
-                        )
-                        / nullif(coalesce(direct.detected_function_count, 0)::numeric + 3.0, 0) as raw_score
+                        round(
+                            1000.0 * coalesce(equipment_counts.connected_equipment_count, 0)::numeric
+                            / nullif(max_equipment.max_connected_equipment_count, 0)
+                        ) / 10.0 as raw_score
                     from group_scope scope
                     join division_employment employment
                       on employment.division_code = scope.division_code
                     left join direct_counts direct
                       on direct.group_code = scope.group_code
+                    left join direct_equipment_counts equipment_counts
+                      on equipment_counts.group_code = scope.group_code
                     left join group_rule_stats group_rule
                       on group_rule.group_code = scope.group_code
                     left join division_rule_stats division_rule
                       on division_rule.division_code = scope.division_code
                     cross join max_rule_stats max_rule
+                    cross join max_equipment_counts max_equipment
                     where employment.start_employee_count is not null
                       and employment.end_employee_count is not null
                 )
@@ -413,14 +428,7 @@ public class BtpSolutionIndustryService {
                     division_code,
                     division_name,
                     employee_growth_rate,
-                    case
-                        when count(*) over () <= 1 then 50.0
-                        else round((
-                            5.0
-                            + 90.0 * (row_number() over (order by raw_score, division_code) - 1)::numeric
-                                / nullif(count(*) over () - 1, 0)
-                        ) * 10.0) / 10.0
-                    end as connection_rate
+                    greatest(0.0, least(100.0, raw_score)) as connection_rate
                 from scored
                 order by division_code
                 """,
@@ -517,14 +525,7 @@ public class BtpSolutionIndustryService {
                         division_code,
                         division_name,
                         employee_growth_rate,
-                        case
-                            when count(*) over () <= 1 then 50.0
-                            else round((
-                                5.0
-                                + 90.0 * (row_number() over (order by raw_connection_rate, division_code) - 1)::numeric
-                                    / nullif(count(*) over () - 1, 0)
-                            ) * 10.0) / 10.0
-                        end as connection_rate
+                        greatest(0.0, least(100.0, round(raw_connection_rate * 10.0) / 10.0)) as connection_rate
                     from scored
                 )
                 select
@@ -731,7 +732,6 @@ public class BtpSolutionIndustryService {
 
     public ApiDataResponse<BtpSolutionRelatedSupportProgramsResponse> relatedSupportPrograms(String divisionCode) {
         KsicInfo division = findDivision(divisionCode);
-        int equipmentCount = relatedEquipmentCount(division.getDivisionCode());
         List<BtpSolutionRelatedSupportProgramsResponse.Item> items = jdbcTemplate.query(
                 """
                 with selected_industry as (
@@ -830,44 +830,97 @@ public class BtpSolutionIndustryService {
                     join keyword_candidates candidate
                       on program.normalized_text like '%' || lower(candidate.keyword) || '%'
                     group by program.support_program_id
+                ),
+                ranked_program as (
+                    select
+                        program.support_program_id,
+                        program.normalized_text,
+                        coalesce(program.budget_program_name, program.code) as title,
+                        program.program_year as year,
+                        program.code,
+                        case
+                            when program.start_date is null and program.end_date is null then '상시 접수중'
+                            when program.start_date is not null and current_date < program.start_date then '접수예정'
+                            when program.end_date is not null and current_date > program.end_date then '지원이력'
+                            else '접수중'
+                        end as status,
+                        case
+                            when program.end_date is not null and current_date <= program.end_date
+                             and (program.start_date is null or current_date >= program.start_date) then 0
+                            when program.start_date is null and program.end_date is null then 1
+                            when program.start_date is not null and current_date < program.start_date then 2
+                            else 3
+                        end as status_rank,
+                        coalesce(match.industry_keyword, match.division_name) as support_field,
+                        program.program_summary as support_content,
+                        match.connection_basis as connection_basis,
+                        match.matched_keyword as matched_keyword,
+                        match.match_score,
+                        program.announcement_url as announce_url
+                    from program_text program
+                    join matched_program match
+                      on match.support_program_id = program.support_program_id
+                    order by
+                        status_rank asc,
+                        match.match_score desc,
+                        program.program_year desc nulls last,
+                        program.code asc,
+                        program.support_program_id asc
+                    limit 40
+                ),
+                program_equipment_counts as (
+                    select
+                        program.support_program_id,
+                        count(distinct equipment.id)::int as equipment_count
+                    from ranked_program program
+                    join public.btp_connection_keyword_rule rule
+                     on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = ?
+                     and rule.keyword = program.matched_keyword
+                     and program.normalized_text like '%' || lower(rule.keyword) || '%'
+                     and rule.equipment_category_large is not null
+                     and rule.equipment_category_middle is not null
+                     and rule.keyword not in (
+                         '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                         '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                         '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                     )
+                    join public.btp_equipment equipment
+                      on equipment.category_large = rule.equipment_category_large
+                     and equipment.category_middle = rule.equipment_category_middle
+                    join public.v_btp_equipment_hub_match equipment_match
+                      on equipment_match.equipment_id = equipment.id
+                    join public.btp_infra_hub hub
+                      on hub.hub_id = equipment_match.hub_id
+                     and hub.active = true
+                    group by program.support_program_id
                 )
                 select
                     program.support_program_id,
-                    coalesce(program.budget_program_name, program.code) as title,
-                    program.program_year as year,
-                    case
-                        when program.start_date is null and program.end_date is null then '상시 접수중'
-                        when program.start_date is not null and current_date < program.start_date then '접수예정'
-                        when program.end_date is not null and current_date > program.end_date then '지원이력'
-                        else '접수중'
-                    end as status,
-                    case
-                        when program.end_date is not null and current_date <= program.end_date
-                         and (program.start_date is null or current_date >= program.start_date) then 0
-                        when program.start_date is null and program.end_date is null then 1
-                        when program.start_date is not null and current_date < program.start_date then 2
-                        else 3
-                    end as status_rank,
-                    coalesce(match.industry_keyword, match.division_name) as support_field,
-                    program.program_summary as support_content,
-                    match.connection_basis as connection_basis,
-                    match.matched_keyword as matched_keyword,
-                    ?::int as equipment_count,
-                    program.announcement_url as announce_url
-                from program_text program
-                join matched_program match
-                  on match.support_program_id = program.support_program_id
+                    program.title,
+                    program.year,
+                    program.status,
+                    program.support_field,
+                    program.support_content,
+                    program.connection_basis,
+                    program.matched_keyword,
+                    coalesce(program_equipment.equipment_count, 0) as equipment_count,
+                    program.announce_url
+                from ranked_program program
+                join program_equipment_counts program_equipment
+                  on program_equipment.support_program_id = program.support_program_id
+                 and program_equipment.equipment_count > 0
                 order by
-                    status_rank asc,
-                    match.match_score desc,
-                    program.program_year desc nulls last,
+                    program.status_rank asc,
+                    program.match_score desc,
+                    program.year desc nulls last,
                     program.code asc,
                     program.support_program_id asc
-                limit 40
                 """,
                 RELATED_SUPPORT_PROGRAM_ROW_MAPPER,
                 division.getDivisionCode(),
-                equipmentCount);
+                division.getDivisionCode());
 
         return new ApiDataResponse<>(new BtpSolutionRelatedSupportProgramsResponse(items));
     }
@@ -895,20 +948,11 @@ public class BtpSolutionIndustryService {
         int pageNumber = Math.max(0, page);
         int pageSize = Math.max(1, Math.min(size, 50));
         int offset = pageNumber * pageSize;
-        long totalElements = relatedEquipmentCount(division.getDivisionCode());
+        long totalElements = relatedProgramEquipmentCount(division.getDivisionCode(), programId);
         int totalPages = totalElements == 0 ? 0 : (int) Math.ceil(totalElements / (double) pageSize);
         List<BtpSolutionRelatedSupportProgramEquipmentsResponse.Item> items = jdbcTemplate.query(
-                evidenceCte()
+                relatedProgramEquipmentCte()
                         + """
-                        , distinct_equipment as (
-                            select distinct
-                                equipment_id,
-                                equipment_name,
-                                hub_name,
-                                category_large,
-                                category_middle
-                            from matched
-                        )
                         select
                             equipment_id,
                             equipment_name,
@@ -920,6 +964,7 @@ public class BtpSolutionIndustryService {
                         limit ? offset ?
                         """,
                 RELATED_SUPPORT_PROGRAM_EQUIPMENT_ROW_MAPPER,
+                programId,
                 division.getDivisionCode(),
                 division.getDivisionCode(),
                 pageSize,
@@ -982,6 +1027,112 @@ public class BtpSolutionIndustryService {
                 divisionCode,
                 divisionCode);
         return count == null ? 0 : count;
+    }
+
+    private int relatedProgramEquipmentCount(String divisionCode, Long programId) {
+        Integer count = jdbcTemplate.queryForObject(
+                relatedProgramEquipmentCte()
+                        + """
+                        select count(distinct equipment_id)::int
+                        from distinct_equipment
+                        """,
+                Integer.class,
+                programId,
+                divisionCode,
+                divisionCode);
+        return count == null ? 0 : count;
+    }
+
+    private String relatedProgramEquipmentCte() {
+        return """
+                with program_text as (
+                    select
+                        support_program_id,
+                        lower(
+                            coalesce(budget_program_name, '') || ' ' ||
+                            coalesce(program_summary, '') || ' ' ||
+                            coalesce(program_category, '') || ' ' ||
+                            coalesce(support_type, '')
+                        ) as normalized_text
+                    from public.btp_support_program
+                    where support_program_id = ?
+                ),
+                selected_industry as (
+                    select distinct
+                        division_code,
+                        division_name,
+                        nullif(trim(replace(replace(division_name, '제조업', ''), '산업', '')), '') as industry_keyword
+                    from public.ksic_info
+                    where division_code = ?
+                    limit 1
+                ),
+                keyword_candidates as (
+                    select industry.division_name as keyword, 100 as match_score
+                    from selected_industry industry
+                    union all
+                    select industry.industry_keyword as keyword, 90 as match_score
+                    from selected_industry industry
+                    where industry.industry_keyword is not null
+                    union all
+                    select term.keyword, 75 as match_score
+                    from selected_industry industry
+                    cross join lateral regexp_split_to_table(industry.industry_keyword, '[[:space:]]+') as term(keyword)
+                    where industry.industry_keyword is not null
+                      and length(term.keyword) >= 2
+                      and term.keyword not in ('기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '장비')
+                    union all
+                    select rule.keyword, 65 as match_score
+                    from public.btp_connection_keyword_rule rule
+                    where rule.active = true
+                      and rule.reviewed = true
+                      and rule.division_code = ?
+                      and rule.keyword is not null
+                      and length(rule.keyword) >= 2
+                      and rule.keyword not in (
+                          '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                          '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                          '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                      )
+                ),
+                matched_keyword as (
+                    select candidate.keyword
+                    from program_text program
+                    join keyword_candidates candidate
+                      on program.normalized_text like '%' || lower(candidate.keyword) || '%'
+                    order by candidate.match_score desc, length(candidate.keyword) desc
+                    limit 1
+                ),
+                distinct_equipment as (
+                    select distinct
+                        equipment.id as equipment_id,
+                        equipment.equipment_name,
+                        hub.hub_name,
+                        equipment.category_large,
+                        equipment.category_middle
+                    from program_text program
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = (select division_code from selected_industry)
+                     and rule.keyword = (select keyword from matched_keyword)
+                     and program.normalized_text like '%' || lower(rule.keyword) || '%'
+                     and rule.equipment_category_large is not null
+                     and rule.equipment_category_middle is not null
+                     and rule.keyword not in (
+                         '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                         '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                         '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                     )
+                    join public.btp_equipment equipment
+                      on equipment.category_large = rule.equipment_category_large
+                     and equipment.category_middle = rule.equipment_category_middle
+                    join public.v_btp_equipment_hub_match equipment_match
+                      on equipment_match.equipment_id = equipment.id
+                    join public.btp_infra_hub hub
+                      on hub.hub_id = equipment_match.hub_id
+                     and hub.active = true
+                )
+                """;
     }
 
     private String evidenceCte() {
@@ -1061,11 +1212,16 @@ public class BtpSolutionIndustryService {
                      and trim(source.source_text) <> ''
                      and lower(source.source_text) like '%' || lower(rule.keyword) || '%'
                      and (rule.division_code is null or rule.division_code = source.division_code)
+                     and rule.equipment_category_large is not null
+                     and rule.equipment_category_middle is not null
+                     and rule.keyword not in (
+                         '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                         '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                         '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                     )
                     join public.btp_equipment equipment
-                      on (rule.equipment_category_large is null
-                          or equipment.category_large = rule.equipment_category_large)
-                     and (rule.equipment_category_middle is null
-                          or equipment.category_middle = rule.equipment_category_middle)
+                      on equipment.category_large = rule.equipment_category_large
+                     and equipment.category_middle = rule.equipment_category_middle
                     join public.v_btp_equipment_hub_match match
                       on match.equipment_id = equipment.id
                     join public.btp_infra_hub hub
@@ -1437,6 +1593,33 @@ public class BtpSolutionIndustryService {
                     from direct_evidence
                     group by division_code
                 ),
+                connected_equipment_counts as (
+                    select
+                        source.division_code,
+                        count(distinct equipment.id)::int as connected_equipment_count
+                    from cleaned source
+                    join public.btp_connection_keyword_rule rule
+                     on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = source.division_code
+                     and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                     and rule.equipment_category_large is not null
+                     and rule.equipment_category_middle is not null
+                     and rule.keyword not in (
+                         '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                         '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                         '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                     )
+                    join public.btp_equipment equipment
+                      on equipment.category_large = rule.equipment_category_large
+                     and equipment.category_middle = rule.equipment_category_middle
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    join public.btp_infra_hub hub
+                      on hub.hub_id = match.hub_id
+                     and hub.active = true
+                    group by source.division_code
+                ),
                 rule_stats as (
                     select
                         rule.division_code,
@@ -1466,6 +1649,10 @@ public class BtpSolutionIndustryService {
                         max(category_pair_count) as max_category_pair_count
                     from rule_stats
                 ),
+                max_equipment_counts as (
+                    select greatest(max(connected_equipment_count), 1) as max_connected_equipment_count
+                    from connected_equipment_counts
+                ),
                 division_scope as (
                     select distinct division_code
                     from public.ksic_info
@@ -1477,25 +1664,18 @@ public class BtpSolutionIndustryService {
                     coalesce(direct.connected_function_count, 0) as connected_function_count,
                     coalesce(direct.unconnected_function_count, 0) as unconnected_function_count,
                     round(
-                        1000.0 * (
-                            coalesce(direct.connected_function_count, 0)::numeric
-                            + 3.0 * 0.30 * coalesce(rule_stats.avg_confidence, 0) * (
-                                0.70 * ln(1 + coalesce(rule_stats.rule_function_count, 0))
-                                    / nullif(ln(1 + max_rule_stats.max_rule_function_count), 0)
-                                + 0.30 * (
-                                    1 - ln(1 + coalesce(rule_stats.category_pair_count, 0))
-                                        / nullif(ln(1 + max_rule_stats.max_category_pair_count), 0)
-                                )
-                            )
-                        )
-                        / nullif(coalesce(direct.detected_function_count, 0)::numeric + 3.0, 0)
+                        1000.0 * coalesce(equipment_counts.connected_equipment_count, 0)::numeric
+                        / nullif(max_equipment_counts.max_connected_equipment_count, 0)
                     ) / 10.0 as infra_relevance_score
                 from division_scope scope
                 left join direct_counts direct
                   on direct.division_code = scope.division_code
+                left join connected_equipment_counts equipment_counts
+                  on equipment_counts.division_code = scope.division_code
                 left join rule_stats
                   on rule_stats.division_code = scope.division_code
                 cross join max_rule_stats
+                cross join max_equipment_counts
                 """;
     }
 
