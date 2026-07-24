@@ -13,5 +13,5 @@ public record BtpSolutionRelatedSupportProgramsResponse(List<Item> items) {
             String supportContent,
             String connectionBasis,
             String linkedEquipment,
-            String sourceUrl) {}
+            String announceUrl) {}
 }
