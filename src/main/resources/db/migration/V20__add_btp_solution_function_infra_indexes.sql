@@ -10,5 +10,8 @@ create index if not exists idx_company_ntis_lead_project_company_id
 create index if not exists idx_btp_connection_keyword_rule_active_reviewed
     on public.btp_connection_keyword_rule (active, reviewed);
 
+create index if not exists idx_btp_connection_keyword_rule_division_active_reviewed
+    on public.btp_connection_keyword_rule (division_code, active, reviewed);
+
 create index if not exists idx_btp_equipment_category
     on public.btp_equipment (category_large, category_middle);

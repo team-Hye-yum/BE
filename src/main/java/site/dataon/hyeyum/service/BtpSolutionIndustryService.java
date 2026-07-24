@@ -627,6 +627,7 @@ public class BtpSolutionIndustryService {
                     select distinct
                         company.company_id,
                         coalesce(nullif(trim(company.company_name), ''), '기업 #' || company.company_id) as company_name,
+                        coalesce(company_ksic.division_code, history_ksic.division_code) as division_code,
                         company.main_product
                     from public.company company
                     left join public.ksic_info company_ksic
@@ -642,6 +643,7 @@ public class BtpSolutionIndustryService {
                     select
                         company_id,
                         company_name,
+                        division_code,
                         '주요제품' as source_field,
                         main_product as source_text
                     from eligible_companies
@@ -649,6 +651,7 @@ public class BtpSolutionIndustryService {
                     select
                         history.company_id,
                         eligible.company_name,
+                        eligible.division_code,
                         '주요제품' as source_field,
                         history.main_product as source_text
                     from public.btp_support_history history
@@ -657,6 +660,7 @@ public class BtpSolutionIndustryService {
                     select
                         history.company_id,
                         eligible.company_name,
+                        eligible.division_code,
                         '지원품목' as source_field,
                         history.support_item as source_text
                     from public.btp_support_history history
@@ -665,6 +669,7 @@ public class BtpSolutionIndustryService {
                     select
                         project.company_id,
                         eligible.company_name,
+                        eligible.division_code,
                         'NTIS 과제명' as source_field,
                         project.project_name as source_text
                     from public.company_ntis_lead_project project
@@ -692,6 +697,7 @@ public class BtpSolutionIndustryService {
                      and source.source_text is not null
                      and trim(source.source_text) <> ''
                      and lower(source.source_text) like '%' || lower(rule.keyword) || '%'
+                     and (rule.division_code is null or rule.division_code = source.division_code)
                     join public.btp_equipment equipment
                       on (rule.equipment_category_large is null
                           or equipment.category_large = rule.equipment_category_large)
@@ -1010,9 +1016,10 @@ public class BtpSolutionIndustryService {
                         true as connected
                     from cleaned source
                     join public.btp_connection_keyword_rule rule
-                      on rule.active = true
+                     on rule.active = true
                      and rule.reviewed = true
                      and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                     and (rule.division_code is null or rule.division_code = source.division_code)
                     join public.btp_equipment equipment
                       on (rule.equipment_category_large is null
                           or equipment.category_large = rule.equipment_category_large)
@@ -1035,6 +1042,7 @@ public class BtpSolutionIndustryService {
                           where rule.active = true
                             and rule.reviewed = true
                             and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                            and (rule.division_code is null or rule.division_code = source.division_code)
                       )
                       and length(source.normalized_text) >= 3
                       and source.normalized_text not like '%지원%'
