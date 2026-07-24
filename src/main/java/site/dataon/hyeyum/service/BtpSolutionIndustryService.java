@@ -743,6 +743,59 @@ public class BtpSolutionIndustryService {
                     where division_code = ?
                     limit 1
                 ),
+                keyword_candidates as (
+                    select
+                        industry.division_code,
+                        industry.division_name,
+                        industry.industry_keyword,
+                        industry.division_name as keyword,
+                        100 as match_score,
+                        '공고문에 산업명 직접 명시' as connection_basis
+                    from selected_industry industry
+                    union all
+                    select
+                        industry.division_code,
+                        industry.division_name,
+                        industry.industry_keyword,
+                        industry.industry_keyword as keyword,
+                        90 as match_score,
+                        '지원분야에 산업 키워드 명시' as connection_basis
+                    from selected_industry industry
+                    where industry.industry_keyword is not null
+                    union all
+                    select
+                        industry.division_code,
+                        industry.division_name,
+                        industry.industry_keyword,
+                        term.keyword,
+                        75 as match_score,
+                        '산업 핵심어 기반 연결' as connection_basis
+                    from selected_industry industry
+                    cross join lateral regexp_split_to_table(industry.industry_keyword, '[[:space:]]+') as term(keyword)
+                    where industry.industry_keyword is not null
+                      and length(term.keyword) >= 2
+                      and term.keyword not in ('기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '장비')
+                    union all
+                    select
+                        industry.division_code,
+                        industry.division_name,
+                        industry.industry_keyword,
+                        rule.keyword,
+                        65 as match_score,
+                        '장비 연계 규칙 키워드 기반 연결' as connection_basis
+                    from selected_industry industry
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = industry.division_code
+                    where rule.keyword is not null
+                      and length(rule.keyword) >= 2
+                      and rule.keyword not in (
+                          '기타', '관련', '제품', '제조', '제조업', '서비스', '서비스업', '산업', '분류되지',
+                          '사용', '있는', '이상', '이하', '구성', '달리', '방식', '일반', '전용', '용도',
+                          '초과', '물질', '장착', '대상', '지원', '기업', '사업'
+                      )
+                ),
                 program_text as (
                     select
                         program.support_program_id,
@@ -762,6 +815,21 @@ public class BtpSolutionIndustryService {
                             coalesce(program.support_type, '')
                         ) as normalized_text
                     from public.btp_support_program program
+                ),
+                matched_program as (
+                    select
+                        program.support_program_id,
+                        max(candidate.match_score) as match_score,
+                        (array_agg(candidate.connection_basis order by candidate.match_score desc, length(candidate.keyword) desc))[1]
+                            as connection_basis,
+                        (array_agg(candidate.keyword order by candidate.match_score desc, length(candidate.keyword) desc))[1]
+                            as matched_keyword,
+                        max(candidate.division_name) as division_name,
+                        max(candidate.industry_keyword) as industry_keyword
+                    from program_text program
+                    join keyword_candidates candidate
+                      on program.normalized_text like '%' || lower(candidate.keyword) || '%'
+                    group by program.support_program_id
                 )
                 select
                     program.support_program_id,
@@ -773,37 +841,20 @@ public class BtpSolutionIndustryService {
                         when program.end_date is not null and current_date > program.end_date then '지원이력'
                         else '접수중'
                     end as status,
-                    coalesce(industry.industry_keyword, industry.division_name) as support_field,
+                    coalesce(match.industry_keyword, match.division_name) as support_field,
                     program.program_summary as support_content,
-                    case
-                        when program.normalized_text like '%' || lower(industry.division_name) || '%'
-                            then '공고문에 산업명 직접 명시'
-                        when industry.industry_keyword is not null
-                         and program.normalized_text like '%' || lower(industry.industry_keyword) || '%'
-                            then '지원분야에 산업 키워드 명시'
-                        when program.normalized_text like '%시험%'
-                          or program.normalized_text like '%분석%'
-                          or program.normalized_text like '%인증%'
-                          or program.normalized_text like '%장비%'
-                          or program.normalized_text like '%센터%'
-                          or program.normalized_text like '%인프라%'
-                            then '지원내용에 장비·인프라 활용 명시'
-                        else '규칙 기반 연결'
-                    end as connection_basis,
+                    match.connection_basis as connection_basis,
                     ?::int as equipment_count,
                     program.announcement_url as announce_url
                 from program_text program
-                cross join selected_industry industry
-                where program.normalized_text like '%' || lower(industry.division_name) || '%'
-                   or (
-                       industry.industry_keyword is not null
-                       and length(industry.industry_keyword) >= 2
-                       and program.normalized_text like '%' || lower(industry.industry_keyword) || '%'
-                   )
+                join matched_program match
+                  on match.support_program_id = program.support_program_id
                 order by
+                    match.match_score desc,
                     program.program_year desc nulls last,
                     program.code asc,
                     program.support_program_id asc
+                limit 40
                 """,
                 RELATED_SUPPORT_PROGRAM_ROW_MAPPER,
                 division.getDivisionCode(),
