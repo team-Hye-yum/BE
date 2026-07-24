@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
-import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceSummaryResponse;
 import site.dataon.hyeyum.dto.BtpSolutionFunctionInfraCoverageResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionMatrixResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionPositionResponse;
@@ -107,18 +106,6 @@ public class BtpSolutionController {
                     @NotBlank
                     String divisionCode) {
         return industryService.infraHubs(divisionCode);
-    }
-
-    @GetMapping("/industries/{divisionCode}/connection-evidence/summary")
-    @Operation(
-            summary = "Get connection evidence summary",
-            description = "Returns connection evidence counts by evidence type for a selected industry.")
-    public ApiDataResponse<BtpSolutionConnectionEvidenceSummaryResponse> connectionEvidenceSummary(
-            @Parameter(description = "KSIC division code", example = "29")
-                    @PathVariable("divisionCode")
-                    @NotBlank
-                    String divisionCode) {
-        return industryService.connectionEvidenceSummary(divisionCode);
     }
 
     @GetMapping("/industries/{divisionCode}/connection-evidence/companies")
