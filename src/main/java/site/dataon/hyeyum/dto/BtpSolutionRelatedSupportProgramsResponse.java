@@ -12,6 +12,7 @@ public record BtpSolutionRelatedSupportProgramsResponse(List<Item> items) {
             String supportField,
             String supportContent,
             String connectionBasis,
+            String matchedKeyword,
             Integer equipmentCount,
             String announceUrl) {}
 }

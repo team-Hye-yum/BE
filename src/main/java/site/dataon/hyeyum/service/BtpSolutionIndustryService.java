@@ -841,15 +841,24 @@ public class BtpSolutionIndustryService {
                         when program.end_date is not null and current_date > program.end_date then '지원이력'
                         else '접수중'
                     end as status,
+                    case
+                        when program.end_date is not null and current_date <= program.end_date
+                         and (program.start_date is null or current_date >= program.start_date) then 0
+                        when program.start_date is null and program.end_date is null then 1
+                        when program.start_date is not null and current_date < program.start_date then 2
+                        else 3
+                    end as status_rank,
                     coalesce(match.industry_keyword, match.division_name) as support_field,
                     program.program_summary as support_content,
                     match.connection_basis as connection_basis,
+                    match.matched_keyword as matched_keyword,
                     ?::int as equipment_count,
                     program.announcement_url as announce_url
                 from program_text program
                 join matched_program match
                   on match.support_program_id = program.support_program_id
                 order by
+                    status_rank asc,
                     match.match_score desc,
                     program.program_year desc nulls last,
                     program.code asc,
@@ -1694,6 +1703,7 @@ public class BtpSolutionIndustryService {
                     rs.getString("support_field"),
                     rs.getString("support_content"),
                     rs.getString("connection_basis"),
+                    rs.getString("matched_keyword"),
                     rs.getObject("equipment_count", Integer.class),
                     rs.getString("announce_url"));
 
