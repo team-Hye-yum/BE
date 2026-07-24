@@ -45,11 +45,11 @@ public class BtpSupportProgram {
     private String budgetProgramName;
 
     @Comment("사업구분//예시) 기업지원")
-    @Column(name = "program_category", length = 20)
+    @Column(name = "program_category", length = 200)
     private String programCategory;
 
     @Comment("사업유형//예시) 패키지지원")
-    @Column(name = "support_type", length = 20)
+    @Column(name = "support_type", length = 200)
     private String supportType;
 
     @Comment("시작일//예시) 2022-01-01")
@@ -69,11 +69,11 @@ public class BtpSupportProgram {
     private String localGovernmentName;
 
     @Comment("주요내용//예시) 경제 활성화")
-    @Column(name = "program_summary", length = 1000)
+    @Column(name = "program_summary", columnDefinition = "text")
     private String programSummary;
 
     @Comment("기업 마당 공고문 정보//PDF 링크들을 담을 예정")
-    @Column(name = "announcement_url", length = 20)
+    @Column(name = "announcement_url", length = 1000)
     private String announcementUrl;
 
     public static BtpSupportProgram create(
