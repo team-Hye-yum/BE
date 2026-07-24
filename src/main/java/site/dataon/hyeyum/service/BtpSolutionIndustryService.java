@@ -20,9 +20,13 @@ import site.dataon.hyeyum.domain.BtpSolutionIndustryStat;
 import site.dataon.hyeyum.domain.KsicInfo;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
+import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceSummaryResponse;
 import site.dataon.hyeyum.dto.BtpSolutionFunctionInfraCoverageResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionMatrixResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionPositionResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
+import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramsResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
 import site.dataon.hyeyum.repository.BtpCompanyBucketProjection;
@@ -89,6 +93,20 @@ public class BtpSolutionIndustryService {
         return new ApiDataResponse<>(new KsicIndustrySearchResponse(items));
     }
 
+    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix() {
+        List<BtpSolutionInfraConnectionMatrixResponse.Item> items = List.of(
+                new BtpSolutionInfraConnectionMatrixResponse.Item("10", "식료품 제조업", -8.2, 46.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("13", "섬유제품 제조업", -2.1, 62.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("20", "화학물질 제조업", 3.4, 21.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("25", "금속가공제품 제조업", 10.2, 74.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("26", "전자부품 제조업", 23.8, 38.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("28", "전기장비 제조업", 12.7, 53.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("29", "기타 기계 및 장비 제조업", 18.4, 31.0),
+                new BtpSolutionInfraConnectionMatrixResponse.Item("30", "자동차 및 트레일러 제조업", 5.6, 68.0));
+
+        return new ApiDataResponse<>(new BtpSolutionInfraConnectionMatrixResponse(items));
+    }
+
     public ApiDataResponse<BtpSolutionIndustryOverviewResponse> overview(String divisionCode) {
         KsicInfo division = findDivision(divisionCode);
         String normalizedDivisionCode = division.getDivisionCode();
@@ -121,6 +139,21 @@ public class BtpSolutionIndustryService {
                         busanBusinessTypeRatio(sectionCode, busanBaseYear),
                         btpBusinessTypeRatio(industryPrefix)),
                 employeeSizeRatios(sectionCode, industryPrefix, busanBaseYear));
+
+        return new ApiDataResponse<>(response);
+    }
+
+    public ApiDataResponse<BtpSolutionInfraConnectionPositionResponse> infraConnectionPosition(String divisionCode) {
+        KsicInfo division = findDivision(divisionCode);
+        BtpSolutionInfraConnectionPositionResponse response = new BtpSolutionInfraConnectionPositionResponse(
+                division.getDivisionCode(),
+                division.getDivisionName(),
+                18.4,
+                31.0,
+                "관찰 구간",
+                "KSIC 중분류",
+                7,
+                2024);
 
         return new ApiDataResponse<>(response);
     }
@@ -332,6 +365,34 @@ public class BtpSolutionIndustryService {
         return new ApiDataResponse<>(new BtpSolutionInfraHubResponse(normalizedDivisionCode, hubs));
     }
 
+    public ApiDataResponse<BtpSolutionConnectionEvidenceSummaryResponse> connectionEvidenceSummary(
+            String divisionCode) {
+        findDivision(divisionCode);
+        List<BtpSolutionConnectionEvidenceSummaryResponse.Item> items = List.of(
+                new BtpSolutionConnectionEvidenceSummaryResponse.Item(
+                        "DIRECT",
+                        "직접 확인",
+                        12,
+                        "원문에 시험·인증 수요가 직접 확인되어 기능을 추출했고, 해당 기능과 연결되는 BTP 장비 근거를 함께 확인했습니다."),
+                new BtpSolutionConnectionEvidenceSummaryResponse.Item(
+                        "RULE",
+                        "규칙 기반 연결",
+                        6,
+                        "원문 키워드를 정규화한 뒤 사전에 정의된 기능 규칙과 매칭하여 관련 장비 후보까지 연결했습니다."),
+                new BtpSolutionConnectionEvidenceSummaryResponse.Item(
+                        "PATH",
+                        "중간 경로 연결",
+                        3,
+                        "제품 설명에서 기능을 도출하고, 기능 분류를 거쳐 장비 분류와 이어지는 중간 경로를 확인했습니다."),
+                new BtpSolutionConnectionEvidenceSummaryResponse.Item(
+                        "UNCONFIRMED",
+                        "연결 근거 미확인",
+                        9,
+                        "연결 근거가 아직 확인되지 않은 기능이며, 장비가 존재하지 않는다는 의미는 아닙니다."));
+
+        return new ApiDataResponse<>(new BtpSolutionConnectionEvidenceSummaryResponse(items));
+    }
+
     public ApiDataResponse<BtpSolutionConnectionEvidenceCompaniesResponse> connectionEvidenceCompanies(
             String divisionCode, String keyword, Long hubId, int page, int size) {
         String normalizedDivisionCode = findDivision(divisionCode).getDivisionCode();
@@ -393,6 +454,31 @@ public class BtpSolutionIndustryService {
 
         return new ApiDataResponse<>(new BtpSolutionConnectionEvidenceCompaniesResponse(
                 normalizedDivisionCode, responseSummary, items, pageNumber, pageSize, totalElements, totalPages));
+    }
+
+    public ApiDataResponse<BtpSolutionRelatedSupportProgramsResponse> relatedSupportPrograms(String divisionCode) {
+        findDivision(divisionCode);
+        List<BtpSolutionRelatedSupportProgramsResponse.Item> items = List.of(
+                new BtpSolutionRelatedSupportProgramsResponse.Item(
+                        101L,
+                        "전동화 전력반도체 테스트베드 기업지원",
+                        2026,
+                        "현재 접수중",
+                        "인프라 이용 승인형",
+                        "전력반도체 시험·인증",
+                        true,
+                        "https://example.com/btp/support-programs/101"),
+                new BtpSolutionRelatedSupportProgramsResponse.Item(
+                        102L,
+                        "현장솔루션랩 참여기업 모집",
+                        2025,
+                        "과거 지원이력",
+                        "컨설팅 매칭형",
+                        "제조 현장 개선",
+                        false,
+                        "https://example.com/btp/support-programs/102"));
+
+        return new ApiDataResponse<>(new BtpSolutionRelatedSupportProgramsResponse(items));
     }
 
     private List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> evidenceItems(

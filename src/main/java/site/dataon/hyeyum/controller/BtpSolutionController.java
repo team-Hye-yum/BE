@@ -13,9 +13,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
 import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceCompaniesResponse;
+import site.dataon.hyeyum.dto.BtpSolutionConnectionEvidenceSummaryResponse;
 import site.dataon.hyeyum.dto.BtpSolutionFunctionInfraCoverageResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionMatrixResponse;
+import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionPositionResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
+import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramsResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
 import site.dataon.hyeyum.service.BtpSolutionIndustryService;
 
@@ -47,6 +51,14 @@ public class BtpSolutionController {
         return industryService.searchIndustries(keyword, limit);
     }
 
+    @GetMapping("/industries/infra-connection-matrix")
+    @Operation(
+            summary = "Get industry-infra connection matrix",
+            description = "Returns industry matrix points for employee growth rate and function-infra connection rate.")
+    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix() {
+        return industryService.infraConnectionMatrix();
+    }
+
     @GetMapping("/industries/{divisionCode}/overview")
     @Operation(
             summary = "Get BTP solution industry overview",
@@ -72,6 +84,18 @@ public class BtpSolutionController {
         return industryService.functionInfraCoverage(divisionCode);
     }
 
+    @GetMapping("/industries/{divisionCode}/infra-connection-position")
+    @Operation(
+            summary = "Get selected industry infra-connection position",
+            description = "Returns selected industry's matrix position summary.")
+    public ApiDataResponse<BtpSolutionInfraConnectionPositionResponse> infraConnectionPosition(
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
+                    @NotBlank
+                    String divisionCode) {
+        return industryService.infraConnectionPosition(divisionCode);
+    }
+
     @GetMapping("/industries/{divisionCode}/infra-hubs")
     @Operation(
             summary = "Get BTP infrastructure hubs",
@@ -83,6 +107,18 @@ public class BtpSolutionController {
                     @NotBlank
                     String divisionCode) {
         return industryService.infraHubs(divisionCode);
+    }
+
+    @GetMapping("/industries/{divisionCode}/connection-evidence/summary")
+    @Operation(
+            summary = "Get connection evidence summary",
+            description = "Returns connection evidence counts by evidence type for a selected industry.")
+    public ApiDataResponse<BtpSolutionConnectionEvidenceSummaryResponse> connectionEvidenceSummary(
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
+                    @NotBlank
+                    String divisionCode) {
+        return industryService.connectionEvidenceSummary(divisionCode);
     }
 
     @GetMapping("/industries/{divisionCode}/connection-evidence/companies")
@@ -110,5 +146,17 @@ public class BtpSolutionController {
                     @Min(1)
                     int size) {
         return industryService.connectionEvidenceCompanies(divisionCode, keyword, hubId, page, size);
+    }
+
+    @GetMapping("/industries/{divisionCode}/related-support-programs")
+    @Operation(
+            summary = "Get related support programs",
+            description = "Returns BTP support programs related to a selected industry.")
+    public ApiDataResponse<BtpSolutionRelatedSupportProgramsResponse> relatedSupportPrograms(
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
+                    @NotBlank
+                    String divisionCode) {
+        return industryService.relatedSupportPrograms(divisionCode);
     }
 }
