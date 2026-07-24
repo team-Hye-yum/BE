@@ -55,8 +55,11 @@ public class BtpSolutionController {
     @Operation(
             summary = "Get industry-infra connection matrix",
             description = "Returns industry matrix points for employee growth rate and function-infra connection rate.")
-    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix() {
-        return industryService.infraConnectionMatrix();
+    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix(
+            @Parameter(description = "Industry granularity: division or group", example = "group")
+                    @RequestParam(value = "level", defaultValue = "division")
+                    String level) {
+        return industryService.infraConnectionMatrix(level);
     }
 
     @GetMapping("/industries/{divisionCode}/overview")

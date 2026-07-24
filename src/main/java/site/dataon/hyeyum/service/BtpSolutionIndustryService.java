@@ -96,7 +96,11 @@ public class BtpSolutionIndustryService {
         return new ApiDataResponse<>(new KsicIndustrySearchResponse(items));
     }
 
-    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix() {
+    public ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrix(String level) {
+        if ("group".equalsIgnoreCase(level)) {
+            return infraConnectionMatrixByGroup();
+        }
+
         List<BtpSolutionInfraConnectionMatrixResponse.Item> items = jdbcTemplate.query(
                 """
                 with employment as (
@@ -119,28 +123,307 @@ public class BtpSolutionIndustryService {
                 ),
                 coverage as (
                 %s
+                ),
+                scored as (
+                    select
+                        employment.division_code,
+                        employment.division_name,
+                        case
+                            when employment.start_employee_count is null or employment.start_employee_count = 0
+                                then null
+                            else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
+                                / employment.start_employee_count)) / 10.0
+                        end as employee_growth_rate,
+                        coalesce(coverage.infra_relevance_score, 0.0) as raw_connection_rate
+                    from employment
+                    left join coverage on coverage.division_code = employment.division_code
+                    where employment.start_employee_count is not null
+                      and employment.end_employee_count is not null
                 )
                 select
-                    employment.division_code,
-                    employment.division_name,
+                    division_code,
+                    division_name,
+                    employee_growth_rate,
                     case
-                        when employment.start_employee_count is null or employment.start_employee_count = 0
-                            then null
-                        else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
-                            / employment.start_employee_count)) / 10.0
-                    end as employee_growth_rate,
-                    case
-                        when coverage.detected_function_count is null or coverage.detected_function_count = 0
-                            then 0.0
-                        else round(coverage.connected_function_count * 1000.0
-                            / coverage.detected_function_count) / 10.0
+                        when count(*) over () <= 1 then 50.0
+                        else round((
+                            5.0
+                            + 90.0 * (row_number() over (order by raw_connection_rate, division_code) - 1)::numeric
+                                / nullif(count(*) over () - 1, 0)
+                        ) * 10.0) / 10.0
                     end as connection_rate
-                from employment
-                left join coverage on coverage.division_code = employment.division_code
-                where employment.start_employee_count is not null
-                  and employment.end_employee_count is not null
-                order by employment.division_code
+                from scored
+                order by division_code
                 """.formatted(functionInfraCoverageByDivisionSql()),
+                INFRA_CONNECTION_MATRIX_ROW_MAPPER,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR,
+                EMPLOYMENT_STATUS,
+                BUSAN_TOTAL,
+                EMPLOYEE_GROWTH_START_YEAR,
+                EMPLOYEE_GROWTH_END_YEAR);
+
+        return new ApiDataResponse<>(new BtpSolutionInfraConnectionMatrixResponse(items));
+    }
+
+    private ApiDataResponse<BtpSolutionInfraConnectionMatrixResponse> infraConnectionMatrixByGroup() {
+        List<BtpSolutionInfraConnectionMatrixResponse.Item> items = jdbcTemplate.query(
+                """
+                with division_employment as (
+                    select
+                        ksic.division_code,
+                        ksic.division_name,
+                        sum(stat.employee_count) filter (where stat.year = ?) as start_employee_count,
+                        sum(stat.employee_count) filter (where stat.year = ?) as end_employee_count
+                    from public.btp_solution_industry_stat stat
+                    join (
+                        select distinct division_code, division_name
+                        from public.ksic_info
+                        where division_code is not null
+                    ) ksic on ksic.division_name = stat.middle_industry_name
+                    where stat.stat_category = ?
+                      and stat.region_name = ?
+                      and stat.dimension_name = '계'
+                      and stat.year in (?, ?)
+                    group by ksic.division_code, ksic.division_name
+                ),
+                group_scope as (
+                    select
+                        group_code,
+                        max(group_name) as group_name,
+                        max(division_code) as division_code,
+                        max(division_name) as division_name,
+                        lower(string_agg(distinct concat_ws(' ',
+                            group_name,
+                            class_name,
+                            subclass_name,
+                            industry_description
+                        ), ' ')) as group_text
+                    from public.ksic_info
+                    where group_code is not null
+                      and division_code is not null
+                    group by group_code
+                ),
+                direct_sources as (
+                    select
+                        ksic.group_code,
+                        'company.main_product' as source_field,
+                        company.main_product as source_text
+                    from public.company company
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.group_code is not null
+                    union all
+                    select
+                        ksic.group_code,
+                        'history.main_product' as source_field,
+                        history.main_product as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.group_code is not null
+                    union all
+                    select
+                        ksic.group_code,
+                        'history.support_item' as source_field,
+                        history.support_item as source_text
+                    from public.btp_support_history history
+                    join public.ksic_info ksic on ksic.ksic_code = history.industry_code
+                    where ksic.group_code is not null
+                    union all
+                    select
+                        ksic.group_code,
+                        'ntis.project_name' as source_field,
+                        project.project_name as source_text
+                    from public.company_ntis_lead_project project
+                    join public.company company on company.company_id = project.company_id
+                    join public.ksic_info ksic on ksic.ksic_code = company.ksic_code
+                    where ksic.group_code is not null
+                ),
+                direct_cleaned as (
+                    select
+                        group_code,
+                        source_field,
+                        trim(source_text) as source_text,
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g')) as normalized_text
+                    from direct_sources
+                    where source_text is not null
+                      and trim(source_text) <> ''
+                    group by
+                        group_code,
+                        source_field,
+                        trim(source_text),
+                        lower(regexp_replace(trim(source_text), '\\s+', ' ', 'g'))
+                ),
+                direct_connected as (
+                    select
+                        source.group_code,
+                        rule.function_name,
+                        true as connected
+                    from direct_cleaned source
+                    join group_scope scope on scope.group_code = source.group_code
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = scope.division_code
+                     and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    group by source.group_code, rule.function_name
+                ),
+                direct_unconnected as (
+                    select
+                        source.group_code,
+                        source.source_text as function_name,
+                        false as connected
+                    from direct_cleaned source
+                    join group_scope scope on scope.group_code = source.group_code
+                    where source.source_field in ('company.main_product', 'history.main_product')
+                      and not exists (
+                          select 1
+                          from public.btp_connection_keyword_rule rule
+                          where rule.active = true
+                            and rule.reviewed = true
+                            and rule.division_code = scope.division_code
+                            and source.normalized_text like '%' || lower(rule.keyword) || '%'
+                      )
+                      and length(source.normalized_text) >= 3
+                      and source.normalized_text not like '%지원%'
+                      and source.normalized_text not like '%사업%'
+                      and source.normalized_text not like '%구축%'
+                      and source.normalized_text not like '%인건비%'
+                      and source.normalized_text not like '%인센티브%'
+                    group by source.group_code, source.source_text
+                ),
+                direct_evidence as (
+                    select
+                        group_code,
+                        function_name,
+                        bool_or(connected) as connected
+                    from (
+                        select group_code, function_name, connected from direct_connected
+                        union all
+                        select group_code, function_name, connected from direct_unconnected
+                    ) detected
+                    group by group_code, function_name
+                ),
+                direct_counts as (
+                    select
+                        group_code,
+                        count(*)::int as detected_function_count,
+                        count(*) filter (where connected)::int as connected_function_count
+                    from direct_evidence
+                    group by group_code
+                ),
+                group_rule_stats as (
+                    select
+                        scope.group_code,
+                        count(distinct rule.function_name)::numeric as rule_function_count,
+                        count(distinct (
+                            coalesce(rule.equipment_category_large, '')
+                            || '>'
+                            || coalesce(rule.equipment_category_middle, '')
+                        ))::numeric as category_pair_count,
+                        avg(rule.confidence)::numeric as avg_confidence
+                    from group_scope scope
+                    join public.btp_connection_keyword_rule rule
+                      on rule.active = true
+                     and rule.reviewed = true
+                     and rule.division_code = scope.division_code
+                     and scope.group_text like '%' || lower(rule.keyword) || '%'
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    group by scope.group_code
+                ),
+                division_rule_stats as (
+                    select
+                        rule.division_code,
+                        count(distinct rule.function_name)::numeric as rule_function_count,
+                        avg(rule.confidence)::numeric as avg_confidence
+                    from public.btp_connection_keyword_rule rule
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    where rule.active = true
+                      and rule.reviewed = true
+                      and rule.division_code is not null
+                    group by rule.division_code
+                ),
+                max_rule_stats as (
+                    select
+                        greatest(max(group_rule_stats.rule_function_count), 1) as max_group_function_count,
+                        greatest(max(group_rule_stats.category_pair_count), 1) as max_group_category_pair_count,
+                        greatest(max(division_rule_stats.rule_function_count), 1) as max_division_function_count
+                    from group_rule_stats
+                    cross join division_rule_stats
+                ),
+                scored as (
+                    select
+                        scope.group_code as division_code,
+                        scope.group_name as division_name,
+                        case
+                            when employment.start_employee_count is null or employment.start_employee_count = 0
+                                then null
+                            else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
+                                / employment.start_employee_count)) / 10.0
+                        end as employee_growth_rate,
+                        (
+                            coalesce(direct.connected_function_count, 0)::numeric
+                            + 3.0 * 0.30 * (
+                                0.80 * coalesce(group_rule.avg_confidence, division_rule.avg_confidence, 0) * (
+                                    0.80 * ln(1 + coalesce(group_rule.rule_function_count, 0))
+                                        / nullif(ln(1 + max_rule.max_group_function_count), 0)
+                                    + 0.20 * (
+                                        1 - ln(1 + coalesce(group_rule.category_pair_count, 0))
+                                            / nullif(ln(1 + max_rule.max_group_category_pair_count), 0)
+                                    )
+                                )
+                                + 0.20 * coalesce(division_rule.avg_confidence, 0)
+                                    * ln(1 + coalesce(division_rule.rule_function_count, 0))
+                                    / nullif(ln(1 + max_rule.max_division_function_count), 0)
+                            )
+                        )
+                        / nullif(coalesce(direct.detected_function_count, 0)::numeric + 3.0, 0) as raw_score
+                    from group_scope scope
+                    join division_employment employment
+                      on employment.division_code = scope.division_code
+                    left join direct_counts direct
+                      on direct.group_code = scope.group_code
+                    left join group_rule_stats group_rule
+                      on group_rule.group_code = scope.group_code
+                    left join division_rule_stats division_rule
+                      on division_rule.division_code = scope.division_code
+                    cross join max_rule_stats max_rule
+                    where employment.start_employee_count is not null
+                      and employment.end_employee_count is not null
+                )
+                select
+                    division_code,
+                    division_name,
+                    employee_growth_rate,
+                    case
+                        when count(*) over () <= 1 then 50.0
+                        else round((
+                            5.0
+                            + 90.0 * (row_number() over (order by raw_score, division_code) - 1)::numeric
+                                / nullif(count(*) over () - 1, 0)
+                        ) * 10.0) / 10.0
+                    end as connection_rate
+                from scored
+                order by division_code
+                """,
                 INFRA_CONNECTION_MATRIX_ROW_MAPPER,
                 EMPLOYEE_GROWTH_START_YEAR,
                 EMPLOYEE_GROWTH_END_YEAR,
@@ -208,29 +491,49 @@ public class BtpSolutionIndustryService {
                       and stat.region_name = ?
                       and stat.dimension_name = '계'
                       and stat.year in (?, ?)
-                      and ksic.division_code = ?
                     group by ksic.division_code, ksic.division_name
                 ),
                 coverage as (
                 %s
+                ),
+                scored as (
+                    select
+                        employment.division_code,
+                        employment.division_name,
+                        case
+                            when employment.start_employee_count is null or employment.start_employee_count = 0
+                                then null
+                            else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
+                                / employment.start_employee_count)) / 10.0
+                        end as employee_growth_rate,
+                        coalesce(coverage.infra_relevance_score, 0.0) as raw_connection_rate
+                    from employment
+                    left join coverage on coverage.division_code = employment.division_code
+                    where employment.start_employee_count is not null
+                      and employment.end_employee_count is not null
+                ),
+                ranked as (
+                    select
+                        division_code,
+                        division_name,
+                        employee_growth_rate,
+                        case
+                            when count(*) over () <= 1 then 50.0
+                            else round((
+                                5.0
+                                + 90.0 * (row_number() over (order by raw_connection_rate, division_code) - 1)::numeric
+                                    / nullif(count(*) over () - 1, 0)
+                            ) * 10.0) / 10.0
+                        end as connection_rate
+                    from scored
                 )
                 select
-                    employment.division_code,
-                    employment.division_name,
-                    case
-                        when employment.start_employee_count is null or employment.start_employee_count = 0
-                            then null
-                        else round(((employment.end_employee_count - employment.start_employee_count) * 1000.0
-                            / employment.start_employee_count)) / 10.0
-                    end as employee_growth_rate,
-                    case
-                        when coverage.detected_function_count is null or coverage.detected_function_count = 0
-                            then 0.0
-                        else round(coverage.connected_function_count * 1000.0
-                            / coverage.detected_function_count) / 10.0
-                    end as connection_rate
-                from employment
-                left join coverage on coverage.division_code = employment.division_code
+                    division_code,
+                    division_name,
+                    employee_growth_rate,
+                    connection_rate
+                from ranked
+                where division_code = ?
                 """.formatted(functionInfraCoverageByDivisionSql()),
                 INDUSTRY_POSITION_ROW_MAPPER,
                 EMPLOYEE_GROWTH_START_YEAR,
@@ -1029,24 +1332,6 @@ public class BtpSolutionIndustryService {
                       on match.equipment_id = equipment.id
                     group by source.division_code, rule.function_name
                 ),
-                rule_connected as (
-                    select
-                        rule.division_code,
-                        rule.function_name,
-                        true as connected
-                    from public.btp_connection_keyword_rule rule
-                    join public.btp_equipment equipment
-                      on (rule.equipment_category_large is null
-                          or equipment.category_large = rule.equipment_category_large)
-                     and (rule.equipment_category_middle is null
-                          or equipment.category_middle = rule.equipment_category_middle)
-                    join public.v_btp_equipment_hub_match match
-                      on match.equipment_id = equipment.id
-                    where rule.active = true
-                      and rule.reviewed = true
-                      and rule.division_code is not null
-                    group by rule.division_code, rule.function_name
-                ),
                 unconnected as (
                     select
                         source.division_code,
@@ -1073,25 +1358,84 @@ public class BtpSolutionIndustryService {
                 detected as (
                     select division_code, function_name, connected from connected
                     union all
-                    select division_code, function_name, connected from rule_connected
-                    union all
                     select division_code, function_name, connected from unconnected
                 ),
-                deduplicated as (
+                direct_evidence as (
                     select
                         division_code,
                         function_name,
                         bool_or(connected) as connected
                     from detected
                     group by division_code, function_name
+                ),
+                direct_counts as (
+                    select
+                        division_code,
+                        count(*)::int as detected_function_count,
+                        count(*) filter (where connected)::int as connected_function_count,
+                        count(*) filter (where not connected)::int as unconnected_function_count
+                    from direct_evidence
+                    group by division_code
+                ),
+                rule_stats as (
+                    select
+                        rule.division_code,
+                        count(distinct rule.function_name)::numeric as rule_function_count,
+                        count(distinct (
+                            coalesce(rule.equipment_category_large, '')
+                            || '>'
+                            || coalesce(rule.equipment_category_middle, '')
+                        ))::numeric as category_pair_count,
+                        avg(rule.confidence)::numeric as avg_confidence
+                    from public.btp_connection_keyword_rule rule
+                    join public.btp_equipment equipment
+                      on (rule.equipment_category_large is null
+                          or equipment.category_large = rule.equipment_category_large)
+                     and (rule.equipment_category_middle is null
+                          or equipment.category_middle = rule.equipment_category_middle)
+                    join public.v_btp_equipment_hub_match match
+                      on match.equipment_id = equipment.id
+                    where rule.active = true
+                      and rule.reviewed = true
+                      and rule.division_code is not null
+                    group by rule.division_code
+                ),
+                max_rule_stats as (
+                    select
+                        max(rule_function_count) as max_rule_function_count,
+                        max(category_pair_count) as max_category_pair_count
+                    from rule_stats
+                ),
+                division_scope as (
+                    select distinct division_code
+                    from public.ksic_info
+                    where division_code is not null
                 )
                 select
-                    division_code,
-                    count(*)::int as detected_function_count,
-                    count(*) filter (where connected)::int as connected_function_count,
-                    count(*) filter (where not connected)::int as unconnected_function_count
-                from deduplicated
-                group by division_code
+                    scope.division_code,
+                    coalesce(direct.detected_function_count, 0) as detected_function_count,
+                    coalesce(direct.connected_function_count, 0) as connected_function_count,
+                    coalesce(direct.unconnected_function_count, 0) as unconnected_function_count,
+                    round(
+                        1000.0 * (
+                            coalesce(direct.connected_function_count, 0)::numeric
+                            + 3.0 * 0.30 * coalesce(rule_stats.avg_confidence, 0) * (
+                                0.70 * ln(1 + coalesce(rule_stats.rule_function_count, 0))
+                                    / nullif(ln(1 + max_rule_stats.max_rule_function_count), 0)
+                                + 0.30 * (
+                                    1 - ln(1 + coalesce(rule_stats.category_pair_count, 0))
+                                        / nullif(ln(1 + max_rule_stats.max_category_pair_count), 0)
+                                )
+                            )
+                        )
+                        / nullif(coalesce(direct.detected_function_count, 0)::numeric + 3.0, 0)
+                    ) / 10.0 as infra_relevance_score
+                from division_scope scope
+                left join direct_counts direct
+                  on direct.division_code = scope.division_code
+                left join rule_stats
+                  on rule_stats.division_code = scope.division_code
+                cross join max_rule_stats
                 """;
     }
 
