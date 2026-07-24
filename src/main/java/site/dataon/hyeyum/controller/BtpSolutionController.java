@@ -18,6 +18,7 @@ import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionMatrixResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionPositionResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
+import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramEquipmentsResponse;
 import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramsResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
 import site.dataon.hyeyum.service.BtpSolutionIndustryService;
@@ -145,5 +146,29 @@ public class BtpSolutionController {
                     @NotBlank
                     String divisionCode) {
         return industryService.relatedSupportPrograms(divisionCode);
+    }
+
+    @GetMapping("/industries/{divisionCode}/related-support-programs/{programId}/equipments")
+    @Operation(
+            summary = "Get related support program equipments",
+            description = "Returns paged BTP equipments related to the selected industry for a support program context.")
+    public ApiDataResponse<BtpSolutionRelatedSupportProgramEquipmentsResponse> relatedSupportProgramEquipments(
+            @Parameter(description = "KSIC division code", example = "29")
+                    @PathVariable("divisionCode")
+                    @NotBlank
+                    String divisionCode,
+            @Parameter(description = "Support program id", example = "101")
+                    @PathVariable("programId")
+                    @Min(1)
+                    Long programId,
+            @Parameter(description = "Page number starting from 0", example = "0")
+                    @RequestParam(value = "page", defaultValue = "0")
+                    @Min(0)
+                    int page,
+            @Parameter(description = "Page size", example = "5")
+                    @RequestParam(value = "size", defaultValue = "5")
+                    @Min(1)
+                    int size) {
+        return industryService.relatedSupportProgramEquipments(divisionCode, programId, page, size);
     }
 }

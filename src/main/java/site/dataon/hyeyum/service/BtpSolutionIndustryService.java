@@ -25,6 +25,7 @@ import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionMatrixResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraConnectionPositionResponse;
 import site.dataon.hyeyum.dto.BtpSolutionInfraHubResponse;
 import site.dataon.hyeyum.dto.BtpSolutionIndustryOverviewResponse;
+import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramEquipmentsResponse;
 import site.dataon.hyeyum.dto.BtpSolutionRelatedSupportProgramsResponse;
 import site.dataon.hyeyum.dto.KsicIndustrySearchItem;
 import site.dataon.hyeyum.dto.KsicIndustrySearchResponse;
@@ -426,30 +427,143 @@ public class BtpSolutionIndustryService {
     }
 
     public ApiDataResponse<BtpSolutionRelatedSupportProgramsResponse> relatedSupportPrograms(String divisionCode) {
-        findDivision(divisionCode);
-        List<BtpSolutionRelatedSupportProgramsResponse.Item> items = List.of(
-                new BtpSolutionRelatedSupportProgramsResponse.Item(
-                        101L,
-                        "전동화 전력반도체 테스트베드 기업지원",
-                        2026,
-                        "현재 접수중",
-                        "전력반도체 시험·인증",
-                        "시제품 성능평가, 신뢰성 시험, 장비 활용 지원",
-                        "공고문에 직접 명시",
-                        "반도체 상용화센터 · 반도체 공정 평가 장비",
-                        "https://example.com/btp/support-programs/101"),
-                new BtpSolutionRelatedSupportProgramsResponse.Item(
-                        102L,
-                        "현장솔루션랩 참여기업 모집",
-                        2025,
-                        "과거 지원이력",
-                        "제조 현장 개선",
-                        "현장 진단, 공정 개선 컨설팅, 기술 전문가 매칭",
-                        "상위 분류 기준 연결",
-                        "유기소재분석센터 · 재료분석 장비",
-                        "https://example.com/btp/support-programs/102"));
+        KsicInfo division = findDivision(divisionCode);
+        int equipmentCount = relatedEquipmentCount(division.getDivisionCode());
+        List<BtpSolutionRelatedSupportProgramsResponse.Item> items = jdbcTemplate.query(
+                """
+                with selected_industry as (
+                    select distinct
+                        division_code,
+                        division_name,
+                        nullif(trim(replace(replace(division_name, '제조업', ''), '산업', '')), '') as industry_keyword
+                    from public.ksic_info
+                    where division_code = ?
+                    limit 1
+                ),
+                program_text as (
+                    select
+                        program.support_program_id,
+                        program.code,
+                        program.budget_program_name,
+                        program.program_year,
+                        program.start_date,
+                        program.end_date,
+                        program.program_category,
+                        program.program_summary,
+                        program.support_type,
+                        program.announcement_url,
+                        lower(
+                            coalesce(program.budget_program_name, '') || ' ' ||
+                            coalesce(program.program_summary, '') || ' ' ||
+                            coalesce(program.program_category, '') || ' ' ||
+                            coalesce(program.support_type, '')
+                        ) as normalized_text
+                    from public.btp_support_program program
+                )
+                select
+                    program.support_program_id,
+                    coalesce(program.budget_program_name, program.code) as title,
+                    program.program_year as year,
+                    case
+                        when program.start_date is null and program.end_date is null then '상시 접수중'
+                        when program.start_date is not null and current_date < program.start_date then '접수예정'
+                        when program.end_date is not null and current_date > program.end_date then '지원이력'
+                        else '접수중'
+                    end as status,
+                    coalesce(industry.industry_keyword, industry.division_name) as support_field,
+                    program.program_summary as support_content,
+                    case
+                        when program.normalized_text like '%' || lower(industry.division_name) || '%'
+                            then '공고문에 산업명 직접 명시'
+                        when industry.industry_keyword is not null
+                         and program.normalized_text like '%' || lower(industry.industry_keyword) || '%'
+                            then '지원분야에 산업 키워드 명시'
+                        when program.normalized_text like '%시험%'
+                          or program.normalized_text like '%분석%'
+                          or program.normalized_text like '%인증%'
+                          or program.normalized_text like '%장비%'
+                          or program.normalized_text like '%센터%'
+                          or program.normalized_text like '%인프라%'
+                            then '지원내용에 장비·인프라 활용 명시'
+                        else '규칙 기반 연결'
+                    end as connection_basis,
+                    ?::int as equipment_count,
+                    program.announcement_url as announce_url
+                from program_text program
+                cross join selected_industry industry
+                where program.normalized_text like '%' || lower(industry.division_name) || '%'
+                   or (
+                       industry.industry_keyword is not null
+                       and length(industry.industry_keyword) >= 2
+                       and program.normalized_text like '%' || lower(industry.industry_keyword) || '%'
+                   )
+                order by
+                    program.program_year desc nulls last,
+                    program.code asc,
+                    program.support_program_id asc
+                """,
+                RELATED_SUPPORT_PROGRAM_ROW_MAPPER,
+                division.getDivisionCode(),
+                equipmentCount);
 
         return new ApiDataResponse<>(new BtpSolutionRelatedSupportProgramsResponse(items));
+    }
+
+    public ApiDataResponse<BtpSolutionRelatedSupportProgramEquipmentsResponse> relatedSupportProgramEquipments(
+            String divisionCode, Long programId, int page, int size) {
+        KsicInfo division = findDivision(divisionCode);
+        if (programId == null || programId < 1) {
+            throw new IllegalArgumentException("programId must be positive.");
+        }
+        boolean exists = Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                """
+                select exists (
+                    select 1
+                    from public.btp_support_program
+                    where support_program_id = ?
+                )
+                """,
+                Boolean.class,
+                programId));
+        if (!exists) {
+            throw new IllegalArgumentException("Unknown support program id: " + programId);
+        }
+
+        int pageNumber = Math.max(0, page);
+        int pageSize = Math.max(1, Math.min(size, 50));
+        int offset = pageNumber * pageSize;
+        long totalElements = relatedEquipmentCount(division.getDivisionCode());
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil(totalElements / (double) pageSize);
+        List<BtpSolutionRelatedSupportProgramEquipmentsResponse.Item> items = jdbcTemplate.query(
+                evidenceCte()
+                        + """
+                        , distinct_equipment as (
+                            select distinct
+                                equipment_id,
+                                equipment_name,
+                                hub_name,
+                                category_large,
+                                category_middle
+                            from matched
+                        )
+                        select
+                            equipment_id,
+                            equipment_name,
+                            hub_name,
+                            category_large,
+                            category_middle
+                        from distinct_equipment
+                        order by hub_name, equipment_name, equipment_id
+                        limit ? offset ?
+                        """,
+                RELATED_SUPPORT_PROGRAM_EQUIPMENT_ROW_MAPPER,
+                division.getDivisionCode(),
+                division.getDivisionCode(),
+                pageSize,
+                offset);
+
+        return new ApiDataResponse<>(new BtpSolutionRelatedSupportProgramEquipmentsResponse(
+                programId, items, pageNumber, pageSize, totalElements, totalPages));
     }
 
     private List<BtpSolutionConnectionEvidenceCompaniesResponse.CompanyEvidenceItem> evidenceItems(
@@ -492,6 +606,19 @@ public class BtpSolutionIndustryService {
                     .add(row);
         }
         return builders.values().stream().map(CompanyEvidenceBuilder::build).toList();
+    }
+
+    private int relatedEquipmentCount(String divisionCode) {
+        Integer count = jdbcTemplate.queryForObject(
+                evidenceCte()
+                        + """
+                        select count(distinct equipment_id)::int
+                        from matched
+                        """,
+                Integer.class,
+                divisionCode,
+                divisionCode);
+        return count == null ? 0 : count;
     }
 
     private String evidenceCte() {
@@ -555,6 +682,7 @@ public class BtpSolutionIndustryService {
                         equipment.id as equipment_id,
                         equipment.equipment_name,
                         equipment.category_large,
+                        equipment.category_middle,
                         match.hub_id,
                         hub.hub_name
                     from company_sources source
@@ -1125,6 +1253,27 @@ public class BtpSolutionIndustryService {
                     rs.getString("division_name"),
                     nullableDouble(rs, "employee_growth_rate"),
                     nullableDouble(rs, "connection_rate"));
+
+    private static final RowMapper<BtpSolutionRelatedSupportProgramsResponse.Item>
+            RELATED_SUPPORT_PROGRAM_ROW_MAPPER = (rs, rowNum) -> new BtpSolutionRelatedSupportProgramsResponse.Item(
+                    rs.getLong("support_program_id"),
+                    rs.getString("title"),
+                    rs.getObject("year", Integer.class),
+                    rs.getString("status"),
+                    rs.getString("support_field"),
+                    rs.getString("support_content"),
+                    rs.getString("connection_basis"),
+                    rs.getObject("equipment_count", Integer.class),
+                    rs.getString("announce_url"));
+
+    private static final RowMapper<BtpSolutionRelatedSupportProgramEquipmentsResponse.Item>
+            RELATED_SUPPORT_PROGRAM_EQUIPMENT_ROW_MAPPER =
+                    (rs, rowNum) -> new BtpSolutionRelatedSupportProgramEquipmentsResponse.Item(
+                            rs.getLong("equipment_id"),
+                            rs.getString("equipment_name"),
+                            rs.getString("hub_name"),
+                            rs.getString("category_large"),
+                            rs.getString("category_middle"));
 
     private static final RowMapper<EvidenceDetailRow> EVIDENCE_DETAIL_ROW_MAPPER = (rs, rowNum) ->
             new EvidenceDetailRow(
