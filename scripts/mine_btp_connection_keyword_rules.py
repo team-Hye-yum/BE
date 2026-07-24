@@ -38,7 +38,8 @@ SOURCE_SQL = """
 with company_divisions as (
     select
         company.company_id,
-        coalesce(company_ksic.division_code, history_ksic.division_code) as division_code
+        coalesce(company_ksic.division_code, history_ksic.division_code) as division_code,
+        coalesce(company_ksic.division_name, history_ksic.division_name) as division_name
     from public.company company
     left join public.ksic_info company_ksic
       on company_ksic.ksic_code = company.ksic_code
@@ -52,6 +53,7 @@ source_rows as (
         company.company_id,
         coalesce(nullif(trim(company.company_name), ''), '기업 #' || company.company_id) as company_name,
         division.division_code,
+        division.division_name,
         'company.main_product' as source_field,
         company.main_product as source_text
     from public.company company
@@ -61,6 +63,7 @@ source_rows as (
         history.company_id,
         coalesce(nullif(trim(company.company_name), ''), '기업 #' || history.company_id) as company_name,
         coalesce(history_ksic.division_code, company_ksic.division_code) as division_code,
+        coalesce(history_ksic.division_name, company_ksic.division_name) as division_name,
         'btp_support_history.main_product' as source_field,
         history.main_product as source_text
     from public.btp_support_history history
@@ -72,6 +75,7 @@ source_rows as (
         history.company_id,
         coalesce(nullif(trim(company.company_name), ''), '기업 #' || history.company_id) as company_name,
         coalesce(history_ksic.division_code, company_ksic.division_code) as division_code,
+        coalesce(history_ksic.division_name, company_ksic.division_name) as division_name,
         'btp_support_history.support_item' as source_field,
         history.support_item as source_text
     from public.btp_support_history history
@@ -83,18 +87,51 @@ source_rows as (
         project.company_id,
         coalesce(nullif(trim(company.company_name), ''), '기업 #' || project.company_id) as company_name,
         company_ksic.division_code,
+        company_ksic.division_name,
         'company_ntis_lead_project.project_name' as source_field,
         project.project_name as source_text
     from public.company_ntis_lead_project project
     join public.company company on company.company_id = project.company_id
     left join public.ksic_info company_ksic on company_ksic.ksic_code = company.ksic_code
 )
-select company_id, company_name, division_code, source_field, source_text
+select company_id, company_name, division_code, division_name, source_field, source_text
 from source_rows
 where source_text is not null
   and trim(source_text) <> ''
   and (%(division_filter)s is null or division_code = %(division_filter)s)
 order by company_id, source_field, source_text
+"""
+
+KSIC_SOURCE_SQL = """
+select
+    row_number() over (order by ksic.ksic_code)::integer as company_id,
+    'KSIC ' || ksic.ksic_code as company_name,
+    ksic.division_code,
+    ksic.division_name,
+    'ksic_info.hierarchy' as source_field,
+    concat_ws(
+        ' ',
+        ksic.ksic_code,
+        ksic.industry_description,
+        ksic.section_name,
+        ksic.division_name,
+        ksic.group_name,
+        ksic.class_name,
+        ksic.subclass_name
+    ) as source_text
+from public.ksic_info ksic
+where concat_ws(
+        ' ',
+        ksic.ksic_code,
+        ksic.industry_description,
+        ksic.section_name,
+        ksic.division_name,
+        ksic.group_name,
+        ksic.class_name,
+        ksic.subclass_name
+    ) <> ''
+  and (%(division_filter)s is null or ksic.division_code = %(division_filter)s)
+order by ksic.division_code, ksic.ksic_code
 """
 
 EQUIPMENT_SQL = """
@@ -163,6 +200,34 @@ STOPWORDS = {
     "and",
     "for",
     "with",
+    "of",
+    "other",
+    "mapping",
+    "manufacturing",
+    "wholesale",
+    "retail",
+    "기타",
+    "관련",
+    "또는",
+    "등을",
+    "등의",
+    "각종",
+    "제외",
+    "제조업",
+    "서비스업",
+    "산업",
+    "포함",
+    "운영",
+    "제조",
+    "제조하는",
+    "기계",
+    "서비스",
+    "경우",
+    "수행하는",
+    "위하여",
+    "위한",
+    "하는",
+    "하여",
 }
 
 
@@ -233,11 +298,121 @@ FUNCTION_PROFILES = [
 ]
 
 
+# Optional manual corrections for divisions where domain knowledge should override
+# or supplement the generic ksic_info-based category inference. All other KSIC
+# divisions are handled dynamically by ksic_category_hints().
+KSIC_EQUIPMENT_CATEGORY_HINT_OVERRIDES = {
+    "21": [
+        ("임상의료장비", None),
+        ("화합물전처리/분석장비", None),
+        ("기계가공/시험장비", "재료물성시험장비"),
+    ],
+    "24": [
+        ("기계가공/시험장비", "재료물성시험장비"),
+        ("기계가공/시험장비", "성형/가공 장비"),
+        ("화합물전처리/분석장비", None),
+    ],
+    "25": [
+        ("기계가공/시험장비", "재료물성시험장비"),
+        ("기계가공/시험장비", "성형/가공 장비"),
+        ("물리적측정장비", None),
+    ],
+    "27": [
+        ("전기/전자장비", "측정시험장비"),
+        ("광학/전자영상장비", None),
+        ("물리적측정장비", None),
+    ],
+    "29": [
+        ("기계가공/시험장비", None),
+        ("물리적측정장비", None),
+        ("전기/전자장비", "측정시험장비"),
+    ],
+    "31": [
+        ("기계가공/시험장비", "재료물성시험장비"),
+        ("물리적측정장비", None),
+        ("환경조성/생산/사육시설장비", None),
+    ],
+    "33": [
+        ("기계가공/시험장비", None),
+        ("물리적측정장비", None),
+        ("전기/전자장비", "측정시험장비"),
+    ],
+    "58": [
+        ("데이터처리장비", None),
+        ("광학/전자영상장비", "카메라/영상처리장비"),
+        ("전기/전자장비", None),
+    ],
+    "70": [
+        ("데이터처리장비", "장비소프트웨어"),
+        ("데이터처리장비", "하드웨어"),
+        ("광학/전자영상장비", None),
+    ],
+    "87": [
+        ("임상의료장비", None),
+        ("물리적측정장비", "힘/토오크/압력/진공측정장비"),
+        ("광학/전자영상장비", "카메라/영상처리장비"),
+    ],
+}
+
+
+# Optional manual keyword boosts. All KSIC divisions still get keywords from
+# ksic_info division/hierarchy text through ksic_industry_keywords().
+KSIC_INDUSTRY_KEYWORD_OVERRIDES = {
+    "21": ["의료", "의약", "바이오", "진단", "치과", "정형", "골이식", "소재"],
+    "24": ["금속", "철강", "비철", "스테인리스", "파이프", "튜브", "주조", "소재"],
+    "25": ["금속", "가공", "구조", "탱크", "안전", "센싱"],
+    "27": ["전자", "전기", "센서", "정밀", "광학", "측정", "기기"],
+    "29": ["자동화", "이송", "열교환", "압력", "유체", "밸브"],
+    "31": ["선박", "해양", "운송", "항공", "철도", "기자재", "부품", "방수"],
+    "33": ["수리", "정비", "부품", "품질"],
+    "58": ["소프트웨어", "콘텐츠", "VR", "AR", "시뮬레이터", "관제", "데이터"],
+    "70": ["연구", "설계", "해석", "시뮬레이션", "소프트웨어"],
+    "87": ["복지", "보행", "건강", "측정", "고령", "인솔", "신체", "의료기기"],
+}
+
+
+INDUSTRY_CATEGORY_RULES = [
+    (
+        ["의료", "의약", "바이오", "보건", "복지", "돌봄", "재활", "병원", "치과"],
+        [("임상의료장비", None), ("화합물전처리/분석장비", None), ("광학/전자영상장비", None)],
+    ),
+    (
+        ["식료", "음료", "농업", "축산", "어업", "수산", "작물", "식품"],
+        [("화합물전처리/분석장비", None), ("환경조성/생산/사육시설장비", None), ("기계가공/시험장비", "열유체장비")],
+    ),
+    (
+        ["섬유", "의복", "가죽", "신발", "목재", "종이", "인쇄", "가구"],
+        [("기계가공/시험장비", "재료물성시험장비"), ("기계가공/시험장비", "성형/가공 장비"), ("광학/전자영상장비", None)],
+    ),
+    (
+        ["화학", "고무", "플라스틱", "비금속", "금속", "철강", "주조", "소재"],
+        [("화합물전처리/분석장비", None), ("기계가공/시험장비", "재료물성시험장비"), ("기계가공/시험장비", "성형/가공 장비")],
+    ),
+    (
+        ["전자", "전기", "컴퓨터", "통신", "영상", "정밀", "광학", "기기"],
+        [("전기/전자장비", "측정시험장비"), ("광학/전자영상장비", None), ("데이터처리장비", None)],
+    ),
+    (
+        ["기계", "자동차", "운송", "선박", "항공", "철도", "장비", "부품", "수리"],
+        [("기계가공/시험장비", None), ("물리적측정장비", None), ("전기/전자장비", "측정시험장비")],
+    ),
+    (
+        ["소프트웨어", "정보", "출판", "콘텐츠", "방송", "데이터", "연구", "전문", "교육"],
+        [("데이터처리장비", None), ("광학/전자영상장비", None), ("전기/전자장비", None)],
+    ),
+    (
+        ["건설", "시설", "환경", "수도", "폐기물", "하수", "운영"],
+        [("환경조성/생산/사육시설장비", None), ("물리적측정장비", None), ("기계가공/시험장비", None)],
+    ),
+]
+
+
 @dataclass(frozen=True)
 class SourceRow:
     company_id: int
     company_name: str
     division_code: str | None
+    division_name: str | None
     source_field: str
     source_text: str
 
@@ -284,6 +459,17 @@ def term_key(value: str) -> str:
     return re.sub(r"\s+", "", value).lower()
 
 
+def is_allowed_term(value: str) -> bool:
+    key = term_key(value)
+    if key in STOPWORDS:
+        return False
+    if re.fullmatch(r"[a-z]+", value):
+        return False
+    if re.fullmatch(r"[A-Za-z]+", value) and value.upper() not in {"AI", "AR", "VR", "IOT", "EMC", "CCTV", "CT", "SW", "HW"}:
+        return False
+    return True
+
+
 def terms(value: str | None) -> set[str]:
     text = normalize_text(value)
     found = set()
@@ -291,13 +477,15 @@ def terms(value: str | None) -> set[str]:
         cleaned = token.strip(".,;:()[]{}<>\"'")
         if len(cleaned) < 2:
             continue
-        if term_key(cleaned) in STOPWORDS:
+        if not is_allowed_term(cleaned):
             continue
         found.add(cleaned)
     return found
 
 
 def contains_term(text: str | None, term: str) -> bool:
+    if re.fullmatch(r"[A-Za-z0-9+#/.-]+", term):
+        return re.search(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", text or "", re.IGNORECASE) is not None
     return term_key(term) in term_key(text or "")
 
 
@@ -390,16 +578,20 @@ class Db:
         return json.loads(payload)
 
 
-def load_data(db: Db, division_code: str | None) -> tuple[list[SourceRow], list[EquipmentRow], list[dict[str, Any]]]:
+def load_data(
+    db: Db, division_code: str | None, source: str = "ksic-info"
+) -> tuple[list[SourceRow], list[EquipmentRow], list[dict[str, Any]]]:
+    source_sql = KSIC_SOURCE_SQL if source == "ksic-info" else SOURCE_SQL
     sources = [
         SourceRow(
             company_id=int(row["company_id"]),
             company_name=row["company_name"],
             division_code=row.get("division_code"),
+            division_name=row.get("division_name"),
             source_field=row["source_field"],
             source_text=row["source_text"],
         )
-        for row in db.query(SOURCE_SQL, {"division_filter": division_code})
+        for row in db.query(source_sql, {"division_filter": division_code})
     ]
     equipment = [
         EquipmentRow(
@@ -417,6 +609,86 @@ def load_data(db: Db, division_code: str | None) -> tuple[list[SourceRow], list[
     ]
     existing = db.query(EXISTING_RULE_SQL)
     return sources, equipment, existing
+
+
+def division_sort_key(value: str) -> tuple[int, int | str]:
+    return (0, int(value)) if value.isdigit() else (1, value)
+
+
+def division_codes_from_sources(sources: list[SourceRow]) -> list[str]:
+    return sorted({row.division_code for row in sources if row.division_code}, key=division_sort_key)
+
+
+def division_name_from_sources(sources: list[SourceRow], division_code: str | None) -> str | None:
+    if division_code is None:
+        return None
+    names = sorted({row.division_name for row in sources if row.division_code == division_code and row.division_name})
+    return names[0] if names else None
+
+
+def add_division_metadata(
+    rows: list[dict[str, Any]], division_code: str | None, division_name: str | None = None
+) -> list[dict[str, Any]]:
+    if division_code is None:
+        return rows
+    return [{"division_code": division_code, "division_name": division_name, **row} for row in rows]
+
+
+def mine_candidates_for_sources(
+    sources: list[SourceRow],
+    equipment: list[EquipmentRow],
+    example_limit: int,
+    top: int,
+    min_company_count: int,
+    division_code: str | None = None,
+    division_name: str | None = None,
+) -> list[dict[str, Any]]:
+    profiles = build_function_profiles(sources, equipment)
+    candidates = dedupe(
+        mine_profile_candidates(sources, equipment, profiles, example_limit)
+        + mine_direct_overlap_candidates(sources, equipment, example_limit)
+    )
+    candidates = [row for row in candidates if int(row["company_count"]) >= min_company_count]
+    return add_division_metadata(attach_evidence_templates(candidates[:top]), division_code, division_name)
+
+
+def sort_candidate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            -int(row.get("company_count") or 0),
+            -int(row.get("source_match_count") or 0),
+            -int(row.get("equipment_count") or 0),
+            str(row.get("division_code") or ""),
+            str(row.get("keyword") or ""),
+        ),
+    )
+
+
+def unique_seed_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            term_key(str(row.get("keyword") or "")),
+            row.get("function_name"),
+            row.get("equipment_category_large"),
+            row.get("equipment_category_middle"),
+        )
+        previous = best.get(key)
+        if previous is None or Decimal(str(row.get("confidence") or "0")) > Decimal(str(previous.get("confidence") or "0")):
+            best[key] = row
+    return sorted(
+        best.values(),
+        key=lambda row: (
+            -Decimal(str(row.get("confidence") or "0")),
+            str(row.get("keyword") or ""),
+            str(row.get("function_name") or ""),
+        ),
+    )
+
+
+def seed_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return unique_seed_rows(rows)
 
 
 def equipment_matches_profile(equipment: EquipmentRow, profile: dict[str, Any]) -> bool:
@@ -437,6 +709,171 @@ def equipment_matches_profile(equipment: EquipmentRow, profile: dict[str, Any]) 
         )
     )
     return any(contains_term(equipment_text, term) for term in profile["equipment_any"])
+
+
+def meaningful_terms(value: str | None, limit: int = 8) -> list[str]:
+    blocked = {"장비", "분류", "달리", "않는", "관련", "기타", "시스템", "시험", "측정", "개발", "제작", "지원", "사업", "제품", "기술"}
+    ranked = sorted(
+        terms(value),
+        key=lambda term: (
+            0 if re.search(r"[가-힣]", term) else 1,
+            -len(term),
+            term,
+        ),
+    )
+    return [term for term in ranked if term_key(term) not in blocked][:limit]
+
+
+def clean_profile_keywords(values: list[str], limit: int = 16) -> list[str]:
+    blocked = {"개발", "시스템", "장비", "기술", "제품", "제작", "사업", "지원", "활용"}
+    cleaned = []
+    for value in values:
+        key = term_key(value)
+        if len(key) < 2 or key in blocked or key in STOPWORDS or key.isdigit():
+            continue
+        if re.search(r"[a-z]", value) and not re.search(r"[가-힣]", value):
+            continue
+        cleaned.append(value)
+    return list(dict.fromkeys(cleaned))[:limit]
+
+
+def category_function_name(category_large: str | None, category_middle: str | None) -> str:
+    if category_middle:
+        base = re.sub(r"\s*장비$", "", category_middle)
+    elif category_large:
+        base = re.sub(r"\s*장비$", "", category_large)
+    else:
+        base = "BTP 장비"
+    if any(word in base for word in ["분석", "측정", "시험", "진단", "영상", "현미경"]):
+        return f"{base} 활용"
+    return f"{base} 검증/활용"
+
+
+def equipment_category_profiles(equipment: list[EquipmentRow], min_equipment_count: int = 3) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str | None, str | None], list[EquipmentRow]] = defaultdict(list)
+    for row in equipment:
+        grouped[(row.category_large, row.category_middle)].append(row)
+
+    profiles = []
+    for (category_large, category_middle), rows in grouped.items():
+        if len({row.equipment_id for row in rows}) < min_equipment_count:
+            continue
+        term_counter: Counter[str] = Counter()
+        for row in rows:
+            text = " ".join(
+                filter(
+                    None,
+                    [row.category_middle, row.category_small, row.equipment_name, row.description],
+                )
+            )
+            term_counter.update(meaningful_terms(text, limit=12))
+        keywords = clean_profile_keywords([term for term, _ in term_counter.most_common(16)], limit=12)
+        equipment_any = list(dict.fromkeys(keywords + meaningful_terms(category_middle) + meaningful_terms(category_large)))
+        if not keywords or not equipment_any:
+            continue
+        profiles.append(
+            {
+                "function_name": category_function_name(category_large, category_middle),
+                "keywords": keywords,
+                "equipment_any": equipment_any,
+                "category_large": category_large,
+                "category_middle": category_middle,
+            }
+        )
+    return profiles
+
+
+def top_equipment_category_hints(equipment: list[EquipmentRow], limit: int = 3) -> list[tuple[str | None, str | None]]:
+    counter = Counter((row.category_large, row.category_middle) for row in equipment if row.category_large or row.category_middle)
+    return [category for category, _ in counter.most_common(limit)]
+
+
+def ksic_industry_keywords(sources: list[SourceRow], division_code: str, limit: int = 16) -> list[str]:
+    division_names = sorted({row.division_name for row in sources if row.division_code == division_code and row.division_name})
+    division_keywords = [
+        term
+        for division_name in division_names
+        for term in meaningful_terms(division_name, limit=8)
+    ]
+    division_text = " ".join(
+        filter(
+            None,
+            [
+                *(row.source_text for row in sources if row.division_code == division_code),
+            ],
+        )
+    )
+    source_keywords = clean_profile_keywords(meaningful_terms(division_text, limit=40), limit=limit)
+    override_keywords = KSIC_INDUSTRY_KEYWORD_OVERRIDES.get(division_code, [])
+    return clean_profile_keywords(override_keywords + division_keywords + source_keywords, limit=limit)
+
+
+def ksic_category_hints(
+    division_code: str,
+    division_name: str,
+    sources: list[SourceRow],
+    equipment: list[EquipmentRow],
+) -> list[tuple[str | None, str | None]]:
+    industry_keywords = ksic_industry_keywords(sources, division_code)
+    division_text = " ".join(filter(None, [division_name, *industry_keywords]))
+    hints = list(KSIC_EQUIPMENT_CATEGORY_HINT_OVERRIDES.get(division_code, []))
+    for terms_to_match, categories in INDUSTRY_CATEGORY_RULES:
+        if any(contains_term(division_text, term) for term in terms_to_match):
+            hints.extend(categories)
+    if not hints:
+        hints.extend(top_equipment_category_hints(equipment))
+    return list(dict.fromkeys(hints))[:4]
+
+
+def ksic_equipment_profiles(sources: list[SourceRow], equipment: list[EquipmentRow]) -> list[dict[str, Any]]:
+    source_divisions = division_codes_from_sources(sources)
+    profiles = []
+    for division_code in source_divisions:
+        division_names = sorted({row.division_name for row in sources if row.division_code == division_code and row.division_name})
+        division_name = division_names[0] if division_names else f"KSIC {division_code}"
+        keywords = ksic_industry_keywords(sources, division_code)
+        if not keywords:
+            continue
+        for category_large, category_middle in ksic_category_hints(division_code, division_name, sources, equipment):
+            matched_equipment = [
+                row
+                for row in equipment
+                if row.category_large == category_large and (category_middle is None or row.category_middle == category_middle)
+            ]
+            if not matched_equipment:
+                continue
+            equipment_any = list(
+                dict.fromkeys(
+                    meaningful_terms(category_large)
+                    + meaningful_terms(category_middle)
+                    + [
+                        term
+                        for row in matched_equipment[:20]
+                        for term in meaningful_terms(
+                            " ".join(filter(None, [row.category_small, row.equipment_name, row.description])),
+                            limit=5,
+                        )
+                    ]
+                )
+            )
+            profiles.append(
+                {
+                    "function_name": f"{division_name} 맞춤 {category_function_name(category_large, category_middle)}",
+                    "keywords": keywords,
+                    "equipment_any": equipment_any,
+                    "category_large": category_large,
+                    "category_middle": category_middle,
+                }
+            )
+    return profiles
+
+
+def build_function_profiles(sources: list[SourceRow], equipment: list[EquipmentRow]) -> list[dict[str, Any]]:
+    profiles = []
+    profiles.extend(FUNCTION_PROFILES)
+    profiles.extend(equipment_category_profiles(equipment))
+    profiles.extend(ksic_equipment_profiles(sources, equipment))
+    return profiles
 
 
 def confidence(company_count: int, source_count: int, equipment_count: int, direct_overlap: bool) -> Decimal:
@@ -475,10 +912,10 @@ def equipment_examples(rows: list[EquipmentRow], limit: int) -> str:
 
 
 def mine_profile_candidates(
-    sources: list[SourceRow], equipment: list[EquipmentRow], example_limit: int
+    sources: list[SourceRow], equipment: list[EquipmentRow], profiles: list[dict[str, Any]], example_limit: int
 ) -> list[dict[str, Any]]:
     candidates = []
-    for profile in FUNCTION_PROFILES:
+    for profile in profiles:
         profile_equipment = [row for row in equipment if equipment_matches_profile(row, profile)]
         if not profile_equipment:
             continue
@@ -1013,7 +1450,16 @@ def ai_review_to_seed_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mine BTP connection keyword rule candidates from local DB data.")
-    parser.add_argument("--division-code", help="Limit source companies to a KSIC division code such as 29.")
+    parser.add_argument(
+        "--source",
+        choices=["ksic-info", "company"],
+        default="ksic-info",
+        help="Source text to mine. Default uses every ksic_info row without reading company data.",
+    )
+    parser.add_argument(
+        "--division-code",
+        help="Limit sources to one KSIC division code such as 29. If omitted, every KSIC division in the selected source is mined separately.",
+    )
     parser.add_argument("--top", type=int, default=120, help="Maximum number of candidate rows to write.")
     parser.add_argument("--min-company-count", type=int, default=1, help="Minimum matched company count.")
     parser.add_argument("--example-limit", type=int, default=3, help="Examples per candidate.")
@@ -1026,29 +1472,74 @@ def main() -> int:
 
     env = {**read_dotenv(ROOT / ".env"), **os.environ}
     db = Db(env)
-    sources, equipment, existing = load_data(db, args.division_code)
+    sources, equipment, existing = load_data(db, args.division_code, args.source)
     if not sources:
-        print("No source rows found. Check --division-code or DB seed data.", file=sys.stderr)
+        print("No source rows found. Check --source, --division-code, or DB seed data.", file=sys.stderr)
         return 1
     if not equipment:
         print("No equipment rows found. Check btp_equipment seed data.", file=sys.stderr)
         return 1
 
-    candidates = dedupe(
-        mine_profile_candidates(sources, equipment, args.example_limit)
-        + mine_direct_overlap_candidates(sources, equipment, args.example_limit)
-    )
-    candidates = [row for row in candidates if int(row["company_count"]) >= args.min_company_count]
-    candidates = attach_evidence_templates(candidates[: args.top])
+    if args.division_code:
+        division_codes = [args.division_code]
+        division_name = division_name_from_sources(sources, args.division_code)
+        candidates = mine_candidates_for_sources(
+            sources,
+            equipment,
+            args.example_limit,
+            args.top,
+            args.min_company_count,
+            args.division_code,
+            division_name,
+        )
+        existing_review = add_division_metadata(
+            review_existing_rules(existing, sources, equipment, args.example_limit),
+            args.division_code,
+            division_name,
+        )
+    else:
+        division_codes = division_codes_from_sources(sources)
+        candidates = []
+        existing_review = []
+        for division_code in division_codes:
+            division_sources = [row for row in sources if row.division_code == division_code]
+            division_name = division_name_from_sources(sources, division_code)
+            candidates.extend(
+                mine_candidates_for_sources(
+                    division_sources,
+                    equipment,
+                    args.example_limit,
+                    args.top,
+                    args.min_company_count,
+                    division_code,
+                    division_name,
+                )
+            )
+            existing_review.extend(
+                add_division_metadata(
+                    review_existing_rules(existing, division_sources, equipment, args.example_limit),
+                    division_code,
+                    division_name,
+                )
+            )
+
+        if not division_codes:
+            candidates = mine_candidates_for_sources(
+                sources,
+                equipment,
+                args.example_limit,
+                args.top,
+                args.min_company_count,
+            )
+            existing_review = review_existing_rules(existing, sources, equipment, args.example_limit)
+
+    candidates = sort_candidate_rows(candidates)
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     write_csv(output_dir / "btp_connection_keyword_candidates.csv", candidates)
-    write_sql(output_dir / "btp_connection_keyword_candidates.sql", candidates)
-    write_csv(
-        output_dir / "btp_connection_existing_rule_review.csv",
-        review_existing_rules(existing, sources, equipment, args.example_limit),
-    )
+    write_sql(output_dir / "btp_connection_keyword_candidates.sql", seed_rows(candidates))
+    write_csv(output_dir / "btp_connection_existing_rule_review.csv", existing_review)
     if args.openai_enrich:
         ai_review = enrich_candidates_with_openai(
             candidates,
@@ -1058,11 +1549,13 @@ def main() -> int:
             timeout_seconds=max(30, args.openai_timeout_seconds),
         )
         write_csv(output_dir / "btp_connection_keyword_ai_review.csv", ai_review)
-        write_sql(output_dir / "btp_connection_keyword_ai_candidates.sql", ai_review_to_seed_rows(ai_review))
+        write_sql(output_dir / "btp_connection_keyword_ai_candidates.sql", seed_rows(ai_review_to_seed_rows(ai_review)))
 
     print(f"sources: {len(sources)}")
+    print(f"source_mode: {args.source}")
     print(f"equipment: {len(equipment)}")
     print(f"existing_rules: {len(existing)}")
+    print(f"division_codes: {len(division_codes)}")
     print(f"candidate_rules: {len(candidates)}")
     if args.openai_enrich:
         print(f"ai_review_rows: {len(ai_review)}")
