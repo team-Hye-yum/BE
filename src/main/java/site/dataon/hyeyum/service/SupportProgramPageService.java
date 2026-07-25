@@ -87,11 +87,13 @@ public class SupportProgramPageService {
     public ApiDataResponse<SupportProgramSearchResponse> search(String keyword, int limit) {
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
         int resultLimit = Math.max(1, limit);
-        if (elasticsearchService.enabled()) {
+        if (elasticsearchService.searchable()) {
             try {
                 return new ApiDataResponse<>(new SupportProgramSearchResponse(elasticsearchService.search(normalizedKeyword, resultLimit)));
             } catch (RuntimeException exception) {
-                log.warn("Elasticsearch support program search failed. Falling back to database search.", exception);
+                log.warn(
+                        "Elasticsearch support program search failed. Falling back to database search. reason={}",
+                        rootCauseMessage(exception));
             }
         }
         List<SupportProgramSearchItem> items = supportProgramRepository.search(normalizedKeyword).stream()
@@ -312,6 +314,14 @@ public class SupportProgramPageService {
 
     private Double round(Double value) {
         return value == null ? null : Math.round(value * 100.0) / 100.0;
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable cursor = throwable;
+        while (cursor.getCause() != null) {
+            cursor = cursor.getCause();
+        }
+        return cursor.getMessage();
     }
 
     private void write(Row row, int index, Object value) {

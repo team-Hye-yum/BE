@@ -7,6 +7,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -26,6 +27,7 @@ public class SupportProgramElasticsearchService {
     private final ElasticsearchOperations operations;
     private final ElasticsearchClient client;
     private final SupportProgramSearchProperties properties;
+    private final AtomicBoolean searchable = new AtomicBoolean(false);
 
     public SupportProgramElasticsearchService(
             ElasticsearchOperations operations,
@@ -38,6 +40,10 @@ public class SupportProgramElasticsearchService {
 
     public boolean enabled() {
         return properties.enabled();
+    }
+
+    public boolean searchable() {
+        return enabled() && searchable.get();
     }
 
     public List<SupportProgramSearchItem> search(String keyword, int limit) {
@@ -89,6 +95,7 @@ public class SupportProgramElasticsearchService {
                     .map(this::mapSearchItem)
                     .toList();
         } catch (RuntimeException | java.io.IOException exception) {
+            searchable.set(false);
             throw new IllegalStateException("Elasticsearch support program search failed.", exception);
         }
     }
@@ -100,7 +107,9 @@ public class SupportProgramElasticsearchService {
         try {
             ensureIndex();
             operations.save(SupportProgramSearchDocument.from(program), SUPPORT_PROGRAM_INDEX);
+            searchable.set(true);
         } catch (RuntimeException exception) {
+            searchable.set(false);
             log.warn("Failed to index support program in Elasticsearch. id={}", program.getSupportProgramId(), exception);
         }
     }
@@ -115,8 +124,10 @@ public class SupportProgramElasticsearchService {
                     .filter(program -> program.getSupportProgramId() != null)
                     .map(SupportProgramSearchDocument::from)
                     .toList(), SUPPORT_PROGRAM_INDEX);
+            searchable.set(true);
             return true;
         } catch (RuntimeException exception) {
+            searchable.set(false);
             log.info("Elasticsearch is not ready for support program sync yet. reason={}", exception.getMessage());
             return false;
         }

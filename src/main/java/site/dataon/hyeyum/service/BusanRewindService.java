@@ -94,7 +94,8 @@ public class BusanRewindService {
         List<IndustryStatRow> employeeRows = baseYear == null
                 ? List.of()
                 : sectionStatRows(industry, baseYear, "EMPLOYEE_SIZE");
-        Integer employeeCount = totalEmployeeCount(employeeRows);
+        Integer industryEmployeeCount = totalEmployeeCount(employeeRows);
+        Integer employeeCount = industryEmployeeCount;
         Integer previousEmployeeCount = previousYear == null
                 ? null
                 : totalEmployeeCount(sectionStatRows(industry, previousYear, "EMPLOYEE_SIZE"));
@@ -109,7 +110,7 @@ public class BusanRewindService {
                     previousCompanyEmployee.value() == null ? null : previousCompanyEmployee.value().intValue();
         }
 
-        Integer employeeCountForRatio = employeeCount;
+        Integer employeeCountForRatio = industryEmployeeCount;
         List<EmployeeSizeRatio> employeeSizeRatios = employeeRows.stream()
                 .filter(row -> !isTotalDimension(row.dimensionName()))
                 .filter(row -> row.employeeCount() != null && employeeCountForRatio != null && employeeCountForRatio > 0)
@@ -963,10 +964,139 @@ public class BusanRewindService {
     private List<IndustryChange> industryChanges(IndustryScope industry, Period period) {
         List<YearValue> values = latestAvailableFlowSeries(industry);
         Double employeeChange = periodChange(values, period.startYear(), period.endYear());
+        Double organizationChange = organizationShareChange(industry, period);
+        Double districtDistributionChange = districtDistributionChange(industry, period);
         return List.of(
                 new IndustryChange("종사자 규모 변화", employeeChange),
-                new IndustryChange("개인/법인 비중 변화", null),
-                new IndustryChange("지역별 산업 분포 변화", null));
+                new IndustryChange("개인/법인 비중 변화", organizationChange),
+                new IndustryChange("지역별 산업 분포 변화", districtDistributionChange));
+    }
+
+    private Double organizationShareChange(IndustryScope industry, Period period) {
+        Integer startYear = nearestOrganizationYear(industry, period.startYear(), false);
+        Integer endYear = nearestOrganizationYear(industry, period.endYear(), true);
+        if (startYear == null || endYear == null || startYear.equals(endYear)) {
+            return null;
+        }
+
+        OrganizationRatio start = organizationRatio(industry, startYear);
+        OrganizationRatio end = organizationRatio(industry, endYear);
+        Double startCorporationShare = corporationShare(start);
+        Double endCorporationShare = corporationShare(end);
+        if (startCorporationShare == null || endCorporationShare == null) {
+            return null;
+        }
+        return round(endCorporationShare - startCorporationShare);
+    }
+
+    private Integer nearestOrganizationYear(IndustryScope industry, int targetYear, boolean preferAfter) {
+        List<Integer> years = jdbcTemplate.query(
+                """
+                select distinct year
+                from btp_solution_industry_stat
+                where section_code = ?
+                  and stat_category = 'ORGANIZATION_FORM'
+                  and establishment_count is not null
+                order by year
+                """,
+                (rs, rowNum) -> rs.getInt("year"),
+                industry.sectionCode());
+        return nearestYear(years, targetYear, preferAfter);
+    }
+
+    private Double corporationShare(OrganizationRatio ratio) {
+        Integer total = sumNullable(ratio.corporationCount(), ratio.individualCount());
+        if (total == null || total <= 0 || ratio.corporationCount() == null) {
+            return null;
+        }
+        return percent(ratio.corporationCount(), total);
+    }
+
+    private Double districtDistributionChange(IndustryScope industry, Period period) {
+        Integer startYear = nearestDistrictStatYear(industry, period.startYear(), false);
+        Integer endYear = nearestDistrictStatYear(industry, period.endYear(), true);
+        if (startYear == null || endYear == null || startYear.equals(endYear)) {
+            return null;
+        }
+
+        Map<String, Double> startShares = districtEmployeeShares(industry, startYear);
+        Map<String, Double> endShares = districtEmployeeShares(industry, endYear);
+        if (startShares.isEmpty() || endShares.isEmpty()) {
+            return null;
+        }
+
+        Set<String> districtNames = new HashSet<>(startShares.keySet());
+        districtNames.addAll(endShares.keySet());
+        double absoluteDifferenceSum = districtNames.stream()
+                .mapToDouble(districtName -> Math.abs(
+                        endShares.getOrDefault(districtName, 0.0) - startShares.getOrDefault(districtName, 0.0)))
+                .sum();
+        return round(absoluteDifferenceSum / 2.0);
+    }
+
+    private Integer nearestDistrictStatYear(IndustryScope industry, int targetYear, boolean preferAfter) {
+        List<Integer> years = jdbcTemplate.query(
+                """
+                select distinct year
+                from btp_solution_industry_stat
+                where section_code = ?
+                  and middle_industry_name = ''
+                  and stat_category = 'DISTRICT'
+                  and region_name <> '전체'
+                  and employee_count is not null
+                order by year
+                """,
+                (rs, rowNum) -> rs.getInt("year"),
+                industry.sectionCode());
+        return nearestYear(years, targetYear, preferAfter);
+    }
+
+    private Map<String, Double> districtEmployeeShares(IndustryScope industry, Integer year) {
+        List<DistrictEmployeeCount> counts = jdbcTemplate.query(
+                """
+                select region_name, sum(employee_count) as employee_count
+                from btp_solution_industry_stat
+                where section_code = ?
+                  and middle_industry_name = ''
+                  and stat_category = 'DISTRICT'
+                  and region_name <> '전체'
+                  and year = ?
+                group by region_name
+                """,
+                (rs, rowNum) -> new DistrictEmployeeCount(
+                        rs.getString("region_name"),
+                        nullableInteger(rs.getObject("employee_count"))),
+                industry.sectionCode(),
+                year);
+        int total = counts.stream()
+                .map(DistrictEmployeeCount::employeeCount)
+                .filter(count -> count != null && count > 0)
+                .mapToInt(Integer::intValue)
+                .sum();
+        if (total <= 0) {
+            return Map.of();
+        }
+        return counts.stream()
+                .filter(count -> count.employeeCount() != null && count.employeeCount() > 0)
+                .collect(java.util.stream.Collectors.toMap(
+                        DistrictEmployeeCount::districtName,
+                        count -> round(count.employeeCount() * 100.0 / total),
+                        (left, right) -> right));
+    }
+
+    private Integer nearestYear(List<Integer> years, int targetYear, boolean preferAfter) {
+        if (years.isEmpty()) {
+            return null;
+        }
+        Optional<Integer> preferred = years.stream()
+                .filter(year -> preferAfter ? year >= targetYear : year <= targetYear)
+                .min((left, right) -> Integer.compare(Math.abs(left - targetYear), Math.abs(right - targetYear)));
+        if (preferred.isPresent()) {
+            return preferred.get();
+        }
+        return years.stream()
+                .min((left, right) -> Integer.compare(Math.abs(left - targetYear), Math.abs(right - targetYear)))
+                .orElse(null);
     }
 
     private List<PastSupportProgram> pastSupportPrograms(IndustryScope industry, Period period) {
@@ -1335,6 +1465,8 @@ public class BusanRewindService {
 
     private record IndustryStatRow(
             String regionName, String dimensionName, Integer establishmentCount, Integer employeeCount) {}
+
+    private record DistrictEmployeeCount(String districtName, Integer employeeCount) {}
 
     private record OrganizationRatio(Integer corporationCount, Integer individualCount) {}
 
