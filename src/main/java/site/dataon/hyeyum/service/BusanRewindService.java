@@ -64,14 +64,20 @@ public class BusanRewindService {
 
     private final JdbcTemplate jdbcTemplate;
     private final NaverNewsSearchClient naverNewsSearchClient;
+    private final GoogleNewsRssClient googleNewsRssClient;
+    private final OpenAiIndustryKeywordClient openAiIndustryKeywordClient;
     private final OpenAiBusanRewindTrendClient openAiBusanRewindTrendClient;
 
     public BusanRewindService(
             JdbcTemplate jdbcTemplate,
             NaverNewsSearchClient naverNewsSearchClient,
+            GoogleNewsRssClient googleNewsRssClient,
+            OpenAiIndustryKeywordClient openAiIndustryKeywordClient,
             OpenAiBusanRewindTrendClient openAiBusanRewindTrendClient) {
         this.jdbcTemplate = jdbcTemplate;
         this.naverNewsSearchClient = naverNewsSearchClient;
+        this.googleNewsRssClient = googleNewsRssClient;
+        this.openAiIndustryKeywordClient = openAiIndustryKeywordClient;
         this.openAiBusanRewindTrendClient = openAiBusanRewindTrendClient;
     }
 
@@ -87,11 +93,22 @@ public class BusanRewindService {
         Integer previousEmployeeCount = previousYear == null
                 ? null
                 : totalEmployeeCount(sectionStatRows(industry, previousYear, "EMPLOYEE_SIZE"));
+        List<YearValue> companyEmployeeSeries = companyEmployeeSeries(industry);
+        if (companyEmployeeSeries.size() >= 2) {
+            YearValue latestCompanyEmployee = companyEmployeeSeries.get(companyEmployeeSeries.size() - 1);
+            YearValue previousCompanyEmployee = companyEmployeeSeries.get(companyEmployeeSeries.size() - 2);
+            baseYear = latestCompanyEmployee.year();
+            previousYear = previousCompanyEmployee.year();
+            employeeCount = latestCompanyEmployee.value() == null ? null : latestCompanyEmployee.value().intValue();
+            previousEmployeeCount =
+                    previousCompanyEmployee.value() == null ? null : previousCompanyEmployee.value().intValue();
+        }
 
+        Integer employeeCountForRatio = employeeCount;
         List<EmployeeSizeRatio> employeeSizeRatios = employeeRows.stream()
                 .filter(row -> !isTotalDimension(row.dimensionName()))
-                .filter(row -> row.employeeCount() != null && employeeCount != null && employeeCount > 0)
-                .map(row -> new EmployeeSizeRatio(row.dimensionName(), percent(row.employeeCount(), employeeCount)))
+                .filter(row -> row.employeeCount() != null && employeeCountForRatio != null && employeeCountForRatio > 0)
+                .map(row -> new EmployeeSizeRatio(row.dimensionName(), percent(row.employeeCount(), employeeCountForRatio)))
                 .limit(8)
                 .toList();
 
@@ -116,7 +133,12 @@ public class BusanRewindService {
     public ApiDataResponse<CurrentSupportPrograms> currentSupportPrograms(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
         List<CurrentSupportProgram> items = currentSupportProgramItems(industry);
-        return new ApiDataResponse<>(new CurrentSupportPrograms(industry.divisionCode(), items));
+        Integer referenceYear = items.stream()
+                .map(CurrentSupportProgram::referenceYear)
+                .filter(year -> year != null)
+                .findFirst()
+                .orElse(null);
+        return new ApiDataResponse<>(new CurrentSupportPrograms(industry.divisionCode(), referenceYear, items));
     }
 
     public ApiDataResponse<TrendBriefing> trendBriefing(String industryCode) {
@@ -134,8 +156,8 @@ public class BusanRewindService {
                 ? withFallback(analysis.overseasIssues(), List.of("해외 이슈는 뉴스 분석 결과가 부족해 별도 요약하지 않습니다."))
                 : List.of("해외 이슈는 네이버 뉴스/OpenAI 분석 결과가 부족해 규칙 기반으로 표시됩니다.");
         ChangeComparison changeComparison = aiGenerated
-                ? analysis.changeComparison()
-                : fallbackChangeComparison();
+                ? withFallback(analysis.changeComparison(), industry)
+                : fallbackChangeComparison(industry);
         List<String> strategicIndustries = aiGenerated
                 ? withFallback(analysis.strategicIndustries(), strategicIndustries(industry.divisionName()))
                 : strategicIndustries(industry.divisionName());
@@ -166,8 +188,8 @@ public class BusanRewindService {
 
     public ApiDataResponse<PastSupportReview> pastSupportReview(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
-        SimilarFlow flow = similarFlowValue(industry);
-        Period period = flow.matchedPeriod();
+        Period period = latestSupportPeriod(industry)
+                .orElseGet(() -> similarFlowValue(industry).matchedPeriod());
         List<IndustryChange> industryChanges = period == null ? List.of() : industryChanges(industry, period);
         List<PastSupportProgram> programs = period == null ? List.of() : pastSupportPrograms(industry, period);
         List<SupportedCompanyChange> companyChanges = period == null ? List.of() : supportedCompanyChanges(industry, period);
@@ -182,7 +204,8 @@ public class BusanRewindService {
 
     public ApiDataResponse<SupportComparison> supportComparison(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
-        Period period = similarFlowValue(industry).matchedPeriod();
+        Period period = latestSupportPeriod(industry)
+                .orElseGet(() -> similarFlowValue(industry).matchedPeriod());
         List<String> pastFields = period == null
                 ? List.of()
                 : extractFields(pastSupportPrograms(industry, period).stream()
@@ -196,6 +219,7 @@ public class BusanRewindService {
         List<String> trendKeywords = policyKeywords(industry.divisionName());
         SupportComparison response = new SupportComparison(
                 industry.divisionCode(),
+                period == null ? null : period.endYear(),
                 commonFields,
                 pastFields,
                 changedFields(pastFields, currentFields),
@@ -334,9 +358,37 @@ public class BusanRewindService {
             }
         }
         if (!hasOrganizationCount) {
-            return new OrganizationRatio(null, null);
+            return companyOrganizationRatio(industry);
         }
         return new OrganizationRatio(corporation, individual);
+    }
+
+    private OrganizationRatio companyOrganizationRatio(IndustryScope industry) {
+        return jdbcTemplate.queryForObject(
+                """
+                select
+                    count(*) filter (
+                        where coalesce(c.business_entity_type, c.company_type, c.listing_status, '') like '%법인%'
+                          and coalesce(c.business_entity_type, c.company_type, c.listing_status, '') not like '%개인%'
+                    ) as corporation_count,
+                    count(*) filter (
+                        where coalesce(c.business_entity_type, c.company_type, c.listing_status, '') like '%개인%'
+                    ) as individual_count
+                from company c
+                join ksic_info ksic on ksic.ksic_code = c.ksic_code
+                where ksic.division_code = ?
+                  and coalesce(c.is_closed, false) = false
+                """,
+                (rs, rowNum) -> {
+                    Integer corporationCount = nullableInteger(rs.getObject("corporation_count"));
+                    Integer individualCount = nullableInteger(rs.getObject("individual_count"));
+                    if ((corporationCount == null || corporationCount == 0)
+                            && (individualCount == null || individualCount == 0)) {
+                        return new OrganizationRatio(null, null);
+                    }
+                    return new OrganizationRatio(corporationCount, individualCount);
+                },
+                industry.divisionCode());
     }
 
     private List<IndustryStatRow> organizationStatRows(IndustryScope industry, Integer year) {
@@ -397,7 +449,28 @@ public class BusanRewindService {
 
     private List<DistrictEmployeeGrowth> districtEmployeeGrowths(
             IndustryScope industry, Integer baseYear, Integer previousYear) {
-        if (baseYear == null || previousYear == null) {
+        if (baseYear == null) {
+            return List.of();
+        }
+        List<DistrictEmployeeGrowth> growths = jdbcTemplate.query(
+                """
+                select region_code, region_name, employee_growth_rate
+                from v_busan_district_industry_employment_growth
+                where year = ?
+                  and division_code = ?
+                  and region_type = 'DISTRICT'
+                order by region_code
+                """,
+                (rs, rowNum) -> new DistrictEmployeeGrowth(
+                        rs.getString("region_code"),
+                        rs.getString("region_name"),
+                        nullableDouble(rs.getObject("employee_growth_rate"))),
+                baseYear,
+                industry.divisionCode());
+        if (!growths.isEmpty()) {
+            return growths;
+        }
+        if (previousYear == null) {
             return List.of();
         }
         return jdbcTemplate.query(
@@ -433,10 +506,11 @@ public class BusanRewindService {
 
     private List<CurrentSupportProgram> currentSupportProgramItems(IndustryScope industry) {
         LocalDate today = LocalDate.now();
-        return jdbcTemplate.query(
+        List<CurrentSupportProgram> items = jdbcTemplate.query(
                 """
                 select
                     p.support_program_id,
+                    p.program_year,
                     p.budget_program_name,
                     p.support_type,
                     p.program_category,
@@ -462,6 +536,7 @@ public class BusanRewindService {
                 (rs, rowNum) -> toCurrentSupportProgram(
                         new CurrentSupportProgramRow(
                                 rs.getLong("support_program_id"),
+                                nullableInteger(rs.getObject("program_year")),
                                 rs.getString("budget_program_name"),
                                 rs.getString("support_type"),
                                 rs.getString("program_category"),
@@ -473,11 +548,68 @@ public class BusanRewindService {
                 today,
                 industry.divisionCode(),
                 industry.divisionCode());
+        return items.isEmpty() ? latestSupportHistoryItems(industry) : items;
+    }
+
+    private List<CurrentSupportProgram> latestSupportHistoryItems(IndustryScope industry) {
+        Optional<Period> latestPeriod = latestSupportPeriod(industry);
+        if (latestPeriod.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query(
+                """
+                select
+                    min(p.support_program_id) as program_id,
+                    h.support_year as reference_year,
+                    coalesce(p.budget_program_name, h.budget_program_name) as title,
+                    max(coalesce(p.support_type, h.support_type, p.program_category)) as support_field,
+                    max(coalesce(p.program_summary, h.support_detail, h.support_item)) as support_content
+                from btp_support_history h
+                left join ksic_info ksic on ksic.ksic_code = h.industry_code
+                left join btp_support_program p on p.code = h.code and p.program_year = h.support_year
+                where h.support_year = ?
+                  and (
+                      ksic.division_code = ?
+                      or h.industry_code like concat(?, '%')
+                  )
+                group by h.code, h.support_year, coalesce(p.budget_program_name, h.budget_program_name)
+                order by count(*) desc, title
+                limit 5
+                """,
+                (rs, rowNum) -> new CurrentSupportProgram(
+                        nullableLong(rs.getObject("program_id")),
+                        nullableInteger(rs.getObject("reference_year")),
+                        defaultText(rs.getString("title"), "지원사업명 없음"),
+                        "최신이력",
+                        null,
+                        defaultText(rs.getString("support_field"), "확인필요"),
+                        truncate(defaultText(rs.getString("support_content"), ""), 80)),
+                latestPeriod.get().endYear(),
+                industry.divisionCode(),
+                industry.divisionCode());
+    }
+
+    private Optional<Period> latestSupportPeriod(IndustryScope industry) {
+        return optionalInteger(
+                        """
+                        select max(h.support_year)
+                        from btp_support_history h
+                        left join ksic_info ksic on ksic.ksic_code = h.industry_code
+                        where h.support_year is not null
+                          and (
+                              ksic.division_code = ?
+                              or h.industry_code like concat(?, '%')
+                          )
+                        """,
+                        industry.divisionCode(),
+                        industry.divisionCode())
+                .map(year -> new Period(year, year, year + " 최신 지원이력"));
     }
 
     private CurrentSupportProgram toCurrentSupportProgram(CurrentSupportProgramRow row, LocalDate today) {
         return new CurrentSupportProgram(
                 row.programId(),
+                row.referenceYear(),
                 defaultText(row.title(), "제목 없음"),
                 status(row.startDate(), row.endDate(), today),
                 row.endDate(),
@@ -506,13 +638,21 @@ public class BusanRewindService {
 
     private OpenAiBusanRewindTrendClient.TrendAnalysis trendAnalysis(
             IndustryScope industry, List<GrowthPoint> growthSeries) {
-        List<NaverNewsSearchClient.NaverNewsItem> newsItems =
-                naverNewsSearchClient.searchIndustryNews(industry.divisionName());
-        if (newsItems.isEmpty()) {
+        OpenAiIndustryKeywordClient.IndustryNewsKeywords newsKeywords =
+                openAiIndustryKeywordClient.generate(industry.divisionCode(), industry.divisionName());
+        List<NaverNewsSearchClient.NaverNewsItem> domesticNewsItems =
+                naverNewsSearchClient.searchIndustryNews(industry.divisionName(), newsKeywords);
+        List<NaverNewsSearchClient.NaverNewsItem> overseasNewsItems =
+                googleNewsRssClient.searchOverseasIndustryNews(industry.divisionName());
+        if (domesticNewsItems.isEmpty() && overseasNewsItems.isEmpty()) {
             return null;
         }
         return openAiBusanRewindTrendClient.analyze(new OpenAiBusanRewindTrendClient.TrendAnalysisRequest(
-                industry.divisionCode(), industry.divisionName(), growthSeriesText(growthSeries), newsItems));
+                industry.divisionCode(),
+                industry.divisionName(),
+                growthSeriesText(growthSeries),
+                domesticNewsItems,
+                overseasNewsItems));
     }
 
     private String growthSeriesText(List<GrowthPoint> growthSeries) {
@@ -528,16 +668,42 @@ public class BusanRewindService {
 
     private List<String> fallbackDomesticIssues(Double latestGrowthRate) {
         return latestGrowthRate == null
-                ? List.of("성장률 DB 매핑이 없어 산업 통계 기반 확인이 필요합니다.")
-                : List.of("최근 성장률 흐름을 DB 기준으로 확인했습니다.", "뉴스/OpenAI 분석 결과가 부족하면 규칙 기반 이슈를 표시합니다.");
+                ? List.of("최근 성장률 데이터가 부족해 산업 통계 보완 확인이 필요합니다.")
+                : List.of(
+                        "최근 성장률은 DB 기준 " + (latestGrowthRate >= 0 ? "플러스" : "마이너스") + " 흐름으로 확인됩니다.",
+                        "뉴스 수집 결과가 제한적인 경우 확인 가능한 산업 통계와 주요 키워드 중심으로 표시합니다.");
     }
 
-    private ChangeComparison fallbackChangeComparison() {
+    private ChangeComparison fallbackChangeComparison(IndustryScope industry) {
         return new ChangeComparison(
-                "제품 변화는 지원사업 텍스트와 뉴스 이슈를 함께 분석해 요약합니다.",
-                "AI, 데이터, 자동화 관련 키워드를 우선 확인합니다.",
-                "부산 제조 기반과 연결되는 수요 산업을 중심으로 확인합니다.",
-                "산업 구조 변화는 통계와 지원사업 분야 변화를 함께 요약합니다.");
+                industry.divisionName() + " 관련 제품 변화는 현재 수집된 뉴스 근거가 부족합니다.",
+                "디지털 전환, AI 활용, 자동화 기술 적용 가능성이 주요 확인 대상입니다.",
+                "수요 산업 변화는 현재 데이터만으로 단정하지 않습니다.",
+                "산업 구조 변화는 성장률과 뉴스 근거가 충분할 때 구체화됩니다.");
+    }
+
+    private ChangeComparison withFallback(ChangeComparison value, IndustryScope industry) {
+        ChangeComparison fallback = fallbackChangeComparison(industry);
+        if (value == null) {
+            return fallback;
+        }
+        return new ChangeComparison(
+                screenText(value.product(), fallback.product()),
+                screenText(value.technology(), fallback.technology()),
+                screenText(value.demand(), fallback.demand()),
+                screenText(value.structure(), fallback.structure()));
+    }
+
+    private String screenText(String value, String fallback) {
+        String text = nullToEmpty(value).trim();
+        if (text.length() < 4
+                || text.contains("요약합니다")
+                || text.contains("확인합니다")
+                || text.contains("분석합니다")
+                || text.contains("제공됩니다")) {
+            return fallback;
+        }
+        return text;
     }
 
     private List<String> withFallback(List<String> values, List<String> fallback) {
@@ -564,15 +730,39 @@ public class BusanRewindService {
     }
 
     private SimilarFlow similarFlowValue(IndustryScope industry) {
-        List<YearValue> values = industryEmployeeSeries(industry);
-        if (values.size() < 6) {
+        List<YearValue> values = latestAvailableFlowSeries(industry);
+        if (values.size() < 2) {
             return new SimilarFlow(
                     industry.divisionCode(),
                     null,
                     "데이터 부족",
-                    "비교 가능한 과거 시계열이 부족합니다.",
+                    "비교 가능한 시계열이 부족합니다.",
                     List.of(),
                     List.of());
+        }
+
+        if (values.size() < 6) {
+            Period latestPeriod = new Period(
+                    values.get(0).year(),
+                    values.get(values.size() - 1).year(),
+                    values.get(0).year() + "~" + values.get(values.size() - 1).year());
+            List<IndexPoint> series = indexSeries(
+                    values,
+                    latestPeriod.startYear(),
+                    latestPeriod.endYear(),
+                    latestPeriod.startYear(),
+                    latestPeriod.endYear());
+            return new SimilarFlow(
+                    industry.divisionCode(),
+                    latestPeriod,
+                    "최신 흐름",
+                    "과거 유사구간 산출에 필요한 장기 시계열이 부족해 최신 가용 흐름을 표시합니다.",
+                    series,
+                    List.of(new PeriodHighlight(
+                            "최신 가용 구간",
+                            latestPeriod.startYear(),
+                            latestPeriod.endYear(),
+                            periodChange(values, latestPeriod.startYear(), latestPeriod.endYear()))));
         }
 
         int currentWindowSize = Math.min(4, values.size() / 2);
@@ -591,6 +781,27 @@ public class BusanRewindService {
                 highlights);
     }
 
+    private List<YearValue> latestAvailableFlowSeries(IndustryScope industry) {
+        List<YearValue> employeeSeries = industryEmployeeSeries(industry);
+        if (employeeSeries.size() >= 2) {
+            return employeeSeries;
+        }
+        List<GrowthPoint> growthPoints = growthSeries(industry);
+        if (growthPoints.isEmpty()) {
+            return employeeSeries;
+        }
+        List<YearValue> indexedValues = new ArrayList<>();
+        double index = 100.0;
+        for (int i = 0; i < growthPoints.size(); i++) {
+            GrowthPoint point = growthPoints.get(i);
+            if (i > 0 && point.growthRate() != null) {
+                index *= 1 + (point.growthRate() / 100.0);
+            }
+            indexedValues.add(new YearValue(point.year(), round(index)));
+        }
+        return indexedValues;
+    }
+
     private List<YearValue> industryEmployeeSeries(IndustryScope industry) {
         return jdbcTemplate.query(
                 """
@@ -607,6 +818,23 @@ public class BusanRewindService {
                 """,
                 (rs, rowNum) -> new YearValue(rs.getInt("year"), rs.getDouble("employee_count")),
                 industry.sectionCode());
+    }
+
+    private List<YearValue> companyEmployeeSeries(IndustryScope industry) {
+        return jdbcTemplate.query(
+                """
+                select s.year, sum(s.employee_count) as employee_count
+                from company_employment_statistics s
+                join company c on c.company_id = s.company_id
+                join ksic_info ksic on ksic.ksic_code = c.ksic_code
+                where ksic.division_code = ?
+                  and s.employee_count is not null
+                  and coalesce(c.is_closed, false) = false
+                group by s.year
+                order by s.year
+                """,
+                (rs, rowNum) -> new YearValue(rs.getInt("year"), rs.getDouble("employee_count")),
+                industry.divisionCode());
     }
 
     private Match bestHistoricalMatch(List<YearValue> values, int windowSize) {
@@ -699,7 +927,7 @@ public class BusanRewindService {
     }
 
     private List<IndustryChange> industryChanges(IndustryScope industry, Period period) {
-        List<YearValue> values = industryEmployeeSeries(industry);
+        List<YearValue> values = latestAvailableFlowSeries(industry);
         Double employeeChange = periodChange(values, period.startYear(), period.endYear());
         return List.of(
                 new IndustryChange("종사자 규모 변화", employeeChange),
@@ -718,9 +946,13 @@ public class BusanRewindService {
                             max(coalesce(p.program_summary, h.support_detail, h.support_item)) as support_content,
                             sum(h.support_amount) as support_amount
                         from btp_support_history h
+                        left join ksic_info ksic on ksic.ksic_code = h.industry_code
                         left join btp_support_program p on p.code = h.code and p.program_year = h.support_year
                         where h.support_year between ? and ?
-                          and h.industry_code like concat(?, '%')
+                          and (
+                              ksic.division_code = ?
+                              or h.industry_code like concat(?, '%')
+                          )
                         group by coalesce(p.program_year, h.support_year), coalesce(p.budget_program_name, h.budget_program_name)
                         order by year desc, title
                         limit 5
@@ -736,6 +968,7 @@ public class BusanRewindService {
                                 nullableBigDecimal(rs.getObject("support_amount"))),
                         period.startYear(),
                         period.endYear(),
+                        industry.divisionCode(),
                         industry.divisionCode())
                 .stream()
                 .toList();
@@ -750,9 +983,13 @@ public class BusanRewindService {
                                 h.support_year,
                                 h.main_product
                             from btp_support_history h
+                            left join ksic_info ksic on ksic.ksic_code = h.industry_code
                             where h.company_id is not null
                               and h.support_year between ? and ?
-                              and h.industry_code like concat(?, '%')
+                              and (
+                                  ksic.division_code = ?
+                                  or h.industry_code like concat(?, '%')
+                              )
                             order by h.company_id, h.support_year
                         )
                         select
@@ -810,6 +1047,7 @@ public class BusanRewindService {
                                 rs.getObject("rnd_after") == null ? null : "지원 이후 R&D 비용 데이터 확인"),
                         period.startYear(),
                         period.endYear(),
+                        industry.divisionCode(),
                         industry.divisionCode());
     }
 
@@ -938,6 +1176,10 @@ public class BusanRewindService {
         return value instanceof Number number ? number.longValue() : null;
     }
 
+    private static Double nullableDouble(Object value) {
+        return value instanceof Number number ? round(number.doubleValue()) : null;
+    }
+
     private static BigDecimal nullableBigDecimal(Object value) {
         if (value instanceof BigDecimal bigDecimal) {
             return bigDecimal;
@@ -981,6 +1223,7 @@ public class BusanRewindService {
 
     private record CurrentSupportProgramRow(
             Long programId,
+            Integer referenceYear,
             String title,
             String supportType,
             String programCategory,

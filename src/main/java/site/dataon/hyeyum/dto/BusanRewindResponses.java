@@ -26,10 +26,11 @@ public final class BusanRewindResponses {
 
     public record DistrictEmployeeGrowth(String sggCode, String districtName, Double growthRate) {}
 
-    public record CurrentSupportPrograms(String industryCode, List<CurrentSupportProgram> items) {}
+    public record CurrentSupportPrograms(String industryCode, Integer referenceYear, List<CurrentSupportProgram> items) {}
 
     public record CurrentSupportProgram(
             Long programId,
+            Integer referenceYear,
             String title,
             String status,
             LocalDate dueDate,
@@ -104,6 +105,7 @@ public final class BusanRewindResponses {
 
     public record SupportComparison(
             String industryCode,
+            Integer referenceYear,
             List<String> commonFields,
             List<String> pastFields,
             List<ChangedField> changedFields,

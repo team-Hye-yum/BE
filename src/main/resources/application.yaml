@@ -52,6 +52,10 @@ naver:
     client-secret: ${NAVER_NEWS_CLIENT_SECRET:}
     display: ${NAVER_NEWS_DISPLAY:10}
 
+google:
+  news:
+    display: ${GOOGLE_NEWS_DISPLAY:10}
+
 support-program-search:
   elasticsearch:
     enabled: ${SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED:true}

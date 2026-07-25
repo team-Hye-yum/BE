@@ -52,7 +52,9 @@ public class OpenAiBusanRewindTrendClient {
     }
 
     public TrendAnalysis analyze(TrendAnalysisRequest request) {
-        if (apiKey == null || apiKey.isBlank() || request.newsItems().isEmpty()) {
+        if (apiKey == null
+                || apiKey.isBlank()
+                || (request.domesticNewsItems().isEmpty() && request.overseasNewsItems().isEmpty())) {
             return null;
         }
         try {
@@ -66,10 +68,10 @@ public class OpenAiBusanRewindTrendClient {
                     stringList(result.path("domesticIssues"), 3),
                     stringList(result.path("overseasIssues"), 3),
                     new ChangeComparison(
-                            limited(result.path("product").asText(""), 120),
-                            limited(result.path("technology").asText(""), 120),
-                            limited(result.path("demand").asText(""), 120),
-                            limited(result.path("structure").asText(""), 120)),
+                            limited(result.path("product").asText(""), 180),
+                            limited(result.path("technology").asText(""), 180),
+                            limited(result.path("demand").asText(""), 180),
+                            limited(result.path("structure").asText(""), 180)),
                     stringList(result.path("strategicIndustries"), 4),
                     stringList(result.path("policyKeywords"), 6),
                     limited(result.path("aiSummary").asText(""), 500));
@@ -87,7 +89,12 @@ public class OpenAiBusanRewindTrendClient {
                         """
                         부산 산업 검토 담당자를 위한 산업 트렌드 브리핑을 작성하세요.
                         입력 뉴스와 DB 성장률만 근거로 사용하고, 지원사업의 적절성/우선순위/성과는 판단하지 마세요.
-                        국내/해외 구분이 불명확하면 무리하게 단정하지 말고 관찰된 이슈 위주로 요약하세요.
+                        domesticIssues는 네이버 뉴스 입력을 우선 근거로 작성하세요.
+                        overseasIssues는 Google News RSS 해외 뉴스 입력을 우선 근거로 작성하세요.
+                        해외 뉴스가 부족하면 해외 이슈를 무리하게 만들지 말고 빈 배열 또는 관찰된 범위만 반환하세요.
+                        product, technology, demand, structure는 화면에 그대로 노출되는 실제 변화 요약입니다.
+                        product, technology, demand, structure에는 "요약합니다", "확인합니다", "분석합니다", "제공됩니다" 같은 내부 처리 설명을 쓰지 마세요.
+                        각 변화 요약은 완성된 한 문장으로 작성하고, 단어가 중간에 끊기지 않게 하세요.
                         모든 값은 한국어로 짧게 작성하고, JSON schema에 맞는 JSON만 반환하세요.
                         """,
                         "input",
@@ -122,13 +129,24 @@ public class OpenAiBusanRewindTrendClient {
         builder.append("industryCode=").append(request.industryCode()).append('\n');
         builder.append("industryName=").append(request.industryName()).append('\n');
         builder.append("growthSeries=").append(request.growthSeriesText()).append("\n\n");
-        builder.append("[뉴스]\n");
-        for (NaverNewsSearchClient.NaverNewsItem item : request.newsItems()) {
+        builder.append("[국내 뉴스 - Naver]\n");
+        appendNewsItems(builder, request.domesticNewsItems());
+        builder.append("\n[해외 뉴스 - Google News RSS]\n");
+        appendNewsItems(builder, request.overseasNewsItems());
+        return builder.toString();
+    }
+
+    private void appendNewsItems(StringBuilder builder, List<NaverNewsSearchClient.NaverNewsItem> newsItems) {
+        if (newsItems.isEmpty()) {
+            builder.append("- 수집 결과 없음\n");
+            return;
+        }
+        for (NaverNewsSearchClient.NaverNewsItem item : newsItems) {
             builder.append("- 제목: ").append(item.title()).append('\n');
             builder.append("  요약: ").append(item.description()).append('\n');
             builder.append("  날짜: ").append(item.publishedAt()).append('\n');
+            builder.append("  링크: ").append(item.link()).append('\n');
         }
-        return builder.toString();
     }
 
     private Map<String, Object> schema() {
@@ -279,7 +297,8 @@ public class OpenAiBusanRewindTrendClient {
             String industryCode,
             String industryName,
             String growthSeriesText,
-            List<NaverNewsSearchClient.NaverNewsItem> newsItems) {}
+            List<NaverNewsSearchClient.NaverNewsItem> domesticNewsItems,
+            List<NaverNewsSearchClient.NaverNewsItem> overseasNewsItems) {}
 
     public record TrendAnalysis(
             List<String> domesticIssues,
