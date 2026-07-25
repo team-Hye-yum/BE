@@ -521,7 +521,8 @@ public class BusanRewindService {
                     p.program_category,
                     p.program_summary,
                     p.start_date,
-                    p.end_date
+                    p.end_date,
+                    p.announcement_url as announce_url
                 from btp_support_program p
                 where (p.start_date is null or p.start_date <= ?)
                   and (p.end_date is null or p.end_date >= ?)
@@ -547,7 +548,8 @@ public class BusanRewindService {
                                 rs.getString("program_category"),
                                 rs.getString("program_summary"),
                                 rs.getObject("start_date", LocalDate.class),
-                                rs.getObject("end_date", LocalDate.class)),
+                                rs.getObject("end_date", LocalDate.class),
+                                rs.getString("announce_url")),
                         today),
                 today,
                 today,
@@ -568,7 +570,8 @@ public class BusanRewindService {
                     h.support_year as reference_year,
                     coalesce(p.budget_program_name, h.budget_program_name) as title,
                     max(coalesce(p.support_type, h.support_type, p.program_category)) as support_field,
-                    max(coalesce(p.program_summary, h.support_detail, h.support_item)) as support_content
+                    max(coalesce(p.program_summary, h.support_detail, h.support_item)) as support_content,
+                    max(p.announcement_url) as announce_url
                 from btp_support_history h
                 left join ksic_info ksic on ksic.ksic_code = h.industry_code
                 left join btp_support_program p on p.code = h.code and p.program_year = h.support_year
@@ -588,7 +591,8 @@ public class BusanRewindService {
                         "최신이력",
                         null,
                         defaultText(rs.getString("support_field"), "확인필요"),
-                        truncate(defaultText(rs.getString("support_content"), ""), 80)),
+                        truncate(defaultText(rs.getString("support_content"), ""), 80),
+                        rs.getString("announce_url")),
                 latestPeriod.get().endYear(),
                 industry.divisionCode(),
                 industry.divisionCode());
@@ -619,7 +623,8 @@ public class BusanRewindService {
                 status(row.startDate(), row.endDate(), today),
                 row.endDate(),
                 firstNonBlank(row.supportType(), row.programCategory(), "확인필요"),
-                truncate(defaultText(row.summary(), ""), 80));
+                truncate(defaultText(row.summary(), ""), 80),
+                row.announceUrl());
     }
 
     private List<GrowthPoint> growthSeries(IndustryScope industry) {
@@ -1276,7 +1281,8 @@ public class BusanRewindService {
             String programCategory,
             String summary,
             LocalDate startDate,
-            LocalDate endDate) {}
+            LocalDate endDate,
+            String announceUrl) {}
 
     private record YearValue(Integer year, Double value) {}
 

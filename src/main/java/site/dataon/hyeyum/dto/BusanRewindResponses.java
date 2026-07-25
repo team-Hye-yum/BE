@@ -35,7 +35,8 @@ public final class BusanRewindResponses {
             String status,
             LocalDate dueDate,
             String supportField,
-            String summary) {}
+            String summary,
+            String announceUrl) {}
 
     public record TrendBriefing(
             String industryCode,
