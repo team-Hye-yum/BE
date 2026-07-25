@@ -46,6 +46,12 @@ openai:
     prompt-directory: ${OPENAI_COMPANY_METRICS_PROMPT_DIRECTORY:}
     parallelism: ${OPENAI_COMPANY_METRICS_PARALLELISM:5}
 
+naver:
+  news:
+    client-id: ${NAVER_NEWS_CLIENT_ID:}
+    client-secret: ${NAVER_NEWS_CLIENT_SECRET:}
+    display: ${NAVER_NEWS_DISPLAY:10}
+
 support-program-search:
   elasticsearch:
     enabled: ${SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED:true}
