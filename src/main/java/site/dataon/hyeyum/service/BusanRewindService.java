@@ -211,12 +211,8 @@ public class BusanRewindService {
         Period period = similarFlowValue(industry).matchedPeriod();
         List<String> pastFields = period == null
                 ? List.of()
-                : extractFields(pastSupportPrograms(industry, period).stream()
-                        .map(PastSupportProgram::supportField)
-                        .toList());
-        List<String> currentFields = extractFields(currentSupportProgramItems(industry).stream()
-                .map(CurrentSupportProgram::supportField)
-                .toList());
+                : extractFields(pastSupportFieldValues(industry, period));
+        List<String> currentFields = extractFields(currentSupportFieldValues(industry));
         List<String> commonFields = currentFields.stream().filter(pastFields::contains).toList();
         List<String> newFields = currentFields.stream().filter(field -> !pastFields.contains(field)).toList();
         List<String> trendKeywords = policyKeywords(industry.divisionName());
@@ -999,7 +995,7 @@ public class BusanRewindService {
                                 nullableLong(rs.getObject("program_id")),
                                 nullableInteger(rs.getObject("year")),
                                 defaultText(rs.getString("title"), "지원사업명 없음"),
-                                defaultText(rs.getString("support_content"), "지원 목적 확인 필요"),
+                                truncate(defaultText(rs.getString("support_content"), "지원 목적 확인 필요"), 80),
                                 "부산 소재 기업",
                                 defaultText(rs.getString("support_field"), "확인필요"),
                                 truncate(defaultText(rs.getString("support_content"), ""), 120),
@@ -1010,6 +1006,77 @@ public class BusanRewindService {
                         industry.divisionCode())
                 .stream()
                 .toList();
+    }
+
+    /** Distinct support fields for the whole period (no display row cap), used only for field comparison. */
+    private List<String> pastSupportFieldValues(IndustryScope industry, Period period) {
+        return jdbcTemplate.query(
+                """
+                select distinct coalesce(p.support_type, h.support_type) as support_field
+                from btp_support_history h
+                left join ksic_info ksic on ksic.ksic_code = h.industry_code
+                left join btp_support_program p on p.code = h.code and p.program_year = h.support_year
+                where h.support_year between ? and ?
+                  and (
+                      ksic.division_code = ?
+                      or h.industry_code like concat(?, '%')
+                  )
+                """,
+                (rs, rowNum) -> rs.getString("support_field"),
+                period.startYear(),
+                period.endYear(),
+                industry.divisionCode(),
+                industry.divisionCode());
+    }
+
+    /** Distinct support fields for currently active programs (no display row cap), used only for field comparison. */
+    private List<String> currentSupportFieldValues(IndustryScope industry) {
+        LocalDate today = LocalDate.now();
+        List<String> fields = jdbcTemplate.query(
+                """
+                select distinct coalesce(p.support_type, p.program_category) as support_field
+                from btp_support_program p
+                where (p.start_date is null or p.start_date <= ?)
+                  and (p.end_date is null or p.end_date >= ?)
+                  and exists (
+                      select 1
+                      from btp_support_history h
+                      left join ksic_info ksic on ksic.ksic_code = h.industry_code
+                      where h.code = p.code
+                        and (
+                            ksic.division_code = ?
+                            or h.industry_code like concat(?, '%')
+                        )
+                  )
+                """,
+                (rs, rowNum) -> rs.getString("support_field"),
+                today,
+                today,
+                industry.divisionCode(),
+                industry.divisionCode());
+        if (!fields.isEmpty()) {
+            return fields;
+        }
+        Optional<Period> latestPeriod = latestSupportPeriod(industry);
+        if (latestPeriod.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query(
+                """
+                select distinct coalesce(p.support_type, h.support_type, p.program_category) as support_field
+                from btp_support_history h
+                left join ksic_info ksic on ksic.ksic_code = h.industry_code
+                left join btp_support_program p on p.code = h.code and p.program_year = h.support_year
+                where h.support_year = ?
+                  and (
+                      ksic.division_code = ?
+                      or h.industry_code like concat(?, '%')
+                  )
+                """,
+                (rs, rowNum) -> rs.getString("support_field"),
+                latestPeriod.get().endYear(),
+                industry.divisionCode(),
+                industry.divisionCode());
     }
 
     private List<SupportedCompanyChange> supportedCompanyChanges(IndustryScope industry, Period period) {

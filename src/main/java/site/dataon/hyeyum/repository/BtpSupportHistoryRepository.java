@@ -21,6 +21,9 @@ public interface BtpSupportHistoryRepository extends JpaRepository<BtpSupportHis
     List<BtpSupportHistory> findByCompanyIdAndSupportYearOrderBySelectedDateDescSupportHistoryIdDesc(
             Integer companyId, Integer supportYear);
 
+    List<BtpSupportHistory> findByCompanyIdAndSupportYearOrderBySelectedDateAscSupportHistoryIdAsc(
+            Integer companyId, Integer supportYear);
+
     List<BtpSupportHistory> findByCompanyIdAndSupportYearLessThanOrderBySupportYearDescSelectedDateDescSupportHistoryIdDesc(
             Integer companyId, Integer supportYear);
 

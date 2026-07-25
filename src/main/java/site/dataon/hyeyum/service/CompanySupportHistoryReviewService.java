@@ -32,6 +32,8 @@ import site.dataon.hyeyum.dto.SupportHistoryLatestVsPastResponse.Summary;
 import site.dataon.hyeyum.dto.SupportHistoryLatestVsPastResponse.SupportHistoryCompareItem;
 import site.dataon.hyeyum.dto.SupportHistoryLatestVsPastResponse.YearlySupportChart;
 import site.dataon.hyeyum.dto.SupportHistoryLatestVsPastResponse.YearlySupportCountItem;
+import site.dataon.hyeyum.dto.SupportHistoryCurrentYearStatusResponse;
+import site.dataon.hyeyum.dto.SupportHistoryCurrentYearStatusResponse.CurrentYearSupportItem;
 import site.dataon.hyeyum.dto.SupportHistoryPostSupportChangeResponse;
 import site.dataon.hyeyum.dto.SupportHistoryPostSupportChangeResponse.ChangeObservationItem;
 import site.dataon.hyeyum.dto.SupportHistoryPostSupportChangeResponse.ObservationStatus;
@@ -131,6 +133,25 @@ public class CompanySupportHistoryReviewService {
                 btpSupportTimeline,
                 effectiveLatestTargets.stream().map(this::mapCompareItem).toList(),
                 comparisons,
+                emptyMessage));
+    }
+
+    @Transactional(readOnly = true)
+    public ApiDataResponse<SupportHistoryCurrentYearStatusResponse> currentYearStatus(Integer companyId) {
+        verifyCompanyExists(companyId);
+
+        int currentYear = LocalDate.now().getYear();
+        List<BtpSupportHistory> histories =
+                supportHistoryRepository.findByCompanyIdAndSupportYearOrderBySelectedDateAscSupportHistoryIdAsc(
+                        companyId, currentYear);
+        int selectedCount = (int) selectedOnly(histories).size();
+        String emptyMessage = histories.isEmpty() ? currentYear + "년 지원 현황이 없습니다." : null;
+
+        return new ApiDataResponse<>(new SupportHistoryCurrentYearStatusResponse(
+                currentYear,
+                histories.size(),
+                selectedCount,
+                histories.stream().map(this::mapCurrentYearSupportItem).toList(),
                 emptyMessage));
     }
 
@@ -508,6 +529,15 @@ public class CompanySupportHistoryReviewService {
                 money(history.getSupportAmount()),
                 formatDate(history.getStartDate()),
                 formatDate(history.getEndDate()));
+    }
+
+    private CurrentYearSupportItem mapCurrentYearSupportItem(BtpSupportHistory history) {
+        return new CurrentYearSupportItem(
+                history.getSupportHistoryId(),
+                history.getBudgetProgramName(),
+                history.getSupportType(),
+                formatDate(history.getStartDate() == null ? history.getSelectedDate() : history.getStartDate()),
+                history.getSelectionResult());
     }
 
     private SupportHistoryCompareItem mapCompareItem(BtpSupportHistory history) {

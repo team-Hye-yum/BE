@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.SupportHistoryCurrentYearStatusResponse;
 import site.dataon.hyeyum.dto.SupportHistoryLatestVsPastResponse;
 import site.dataon.hyeyum.dto.SupportHistoryPostSupportChangeResponse;
 import site.dataon.hyeyum.service.CompanySupportHistoryReviewService;
@@ -42,6 +43,22 @@ public class CompanySupportHistoryController {
                     @NotNull
                     Integer companyId) {
         return supportHistoryReviewService.latestVsPast(companyId);
+    }
+
+    @GetMapping("/current-year-status")
+    @Operation(
+            summary = "금년도 지원 현황",
+            description = "기업의 금년도 부산TP 지원 신청/선정 이력을 목록으로 반환한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "금년도 지원 현황 조회 성공"),
+        @ApiResponse(responseCode = "404", description = "기업 정보를 찾을 수 없음")
+    })
+    public ApiDataResponse<SupportHistoryCurrentYearStatusResponse> currentYearStatus(
+            @Parameter(description = "기업 일련번호", example = "1786")
+                    @PathVariable("companyId")
+                    @NotNull
+                    Integer companyId) {
+        return supportHistoryReviewService.currentYearStatus(companyId);
     }
 
     @GetMapping("/review/post-support-changes")
