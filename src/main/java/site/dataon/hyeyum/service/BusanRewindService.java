@@ -838,6 +838,7 @@ public class BusanRewindService {
                 "- 현재 지원사업은 **"
                         + joinLimited(supportComparison.currentFields(), "확인 제한")
                         + "** 항목을 중심으로 재편되어 있습니다.",
+                "- BTP가 지원하는 공동지원 사업의 관점에서는 개별 기업의 단기 성과보다 산업 공통 수요와 지원 분야의 연결성을 우선 확인하는 것이 좋습니다.",
                 "- 기업 검토 시에는 산업 전체 성장 흐름과 현재 지원 분야의 연결성을 함께 확인할 수 있습니다."
                         + firstLink,
                 "## 검토 포인트"));
@@ -868,41 +869,41 @@ public class BusanRewindService {
         if (employeeGrowthRate != null) {
             candidates.add(new ScoredText(
                     Math.abs(employeeGrowthRate) + 40,
-                    "- **종사자수 변화**는 현재 산업 흐름에서 가장 먼저 볼 지표입니다. 기업별 고용 증감이 매출 흐름과 같은 방향인지 확인하면 실행 역량을 더 분명하게 볼 수 있습니다."));
+                    "- **매출과 고용의 방향성**: 산업 통계에서 종사자 변화가 두드러지므로, 개별 기업의 매출액과 종사자수가 같은 방향으로 움직이는지 먼저 확인할 수 있습니다."));
         }
         if (containsAny(signalText, "R&D", "연구", "기술", "특허", "인증", "AI", "디지털", "스마트")) {
             candidates.add(new ScoredText(
                     90,
-                    "- **R&D 비용과 특허·인증 근거**를 우선 확인하는 것이 좋습니다. 현재 지원 분야가 기술 전환 쪽으로 움직이는 경우, 실제 연구·활동 데이터가 사업 적합성을 해석하는 핵심 보조자료가 됩니다."
+                    "- **기술 전환의 실제 근거**: 현재 지원 분야와 뉴스 근거가 기술·디지털 전환 쪽으로 기울면, R&D 비용과 특허·인증의 최근 변화를 우선 확인하는 것이 좋습니다."
                             + evidenceLink));
         }
         if (containsAny(signalText, "사업화", "판로", "수출", "마케팅", "시장", "수요", "투자")) {
             candidates.add(new ScoredText(
                     80,
-                    "- **매출액과 영업이익률**을 먼저 비교해 볼 수 있습니다. 수요 확대나 사업화 지원 신호가 강할 때는 매출 규모뿐 아니라 이익 흐름이 함께 따라오는지 확인하는 것이 중요합니다."
+                    "- **수요 확대의 사업화 여부**: 사업화·판로·수요 확대 신호가 강할 때는 매출액과 영업이익률을 함께 보는 편이 좋습니다."
                             + evidenceLink));
         }
         if (containsAny(signalText, "설비", "장비", "공정", "탄소", "친환경", "ESG")) {
             candidates.add(new ScoredText(
                     70,
-                    "- **부채비율과 자산·부채 구조**를 함께 보는 것이 좋습니다. 설비·공정 전환 성격이 강한 산업에서는 투자 여력과 재무 부담을 같이 확인해야 해석이 안정적입니다."));
+                    "- **투자 부담과 지속 가능성**: 설비·공정·친환경 전환 성격이 강한 산업에서는 자산 증가와 부채 증가가 함께 나타나는지 확인할 필요가 있습니다."));
         }
         if (!supportComparison.pastFields().isEmpty() || !supportComparison.currentFields().isEmpty()) {
             candidates.add(new ScoredText(
                     55,
-                    "- **과거 지원이력과 중복지원 이력**은 동일 목적의 반복인지, 이전 지원 이후 단계적 고도화인지 구분하는 참고 지표로 활용할 수 있습니다."));
+                    "- **지원 이력의 연결성**: 과거와 현재 지원 분야가 겹치는 경우에는 같은 목적의 반복인지, 이전 지원 이후 단계적 고도화인지 구분해 볼 수 있습니다."));
         }
         if (candidates.isEmpty()) {
             candidates.add(new ScoredText(
                     1,
-                    "- **매출액과 종사자수 변화**를 우선 확인하는 것이 좋습니다. 산업 통계만으로는 개별 기업의 성장 흐름을 단정하기 어려우므로 기본 실적과 고용 흐름을 먼저 맞춰볼 수 있습니다."));
+                    "- **기본 성장 흐름의 확인**: 산업 통계만으로는 개별 기업의 변화를 단정하기 어려우므로 매출액과 종사자수 변화를 먼저 맞춰볼 수 있습니다."));
         }
 
         return candidates.stream()
                 .sorted((left, right) -> Double.compare(right.score(), left.score()))
                 .map(ScoredText::text)
                 .distinct()
-                .limit(3)
+                .limit(2)
                 .toList();
     }
 
@@ -920,6 +921,7 @@ public class BusanRewindService {
                 "과거 유사 흐름은 " + similarFlow.flowType() + " 유형으로 분류되며, " + defaultText(similarFlow.summary(), "비교 가능한 시계열이 제한적입니다."),
                 "과거 지원사업은 " + joinLimited(supportComparison.pastFields(), "확인 제한") + " 중심으로 나타납니다.",
                 "현재 지원사업은 " + joinLimited(supportComparison.currentFields(), "확인 제한") + " 항목을 중심으로 재편되어 있습니다.",
+                "BTP가 지원하는 공동지원 사업의 관점에서는 산업 공통 수요와 지원 분야의 연결성을 우선 확인하는 것이 좋습니다.",
                 "새롭게 확인되는 지원 분야는 " + joinLimited(supportComparison.newFields(), "뚜렷하지 않음") + "입니다.",
                 "기업 검토 시에는 개별 매출 변화와 산업 전체 성장 흐름을 함께 비교해야 합니다.",
                 "고용과 생산 역량은 수요 확대 국면에서 실행 가능성을 판단하는 보조 관점으로 활용할 수 있습니다." + secondLink,

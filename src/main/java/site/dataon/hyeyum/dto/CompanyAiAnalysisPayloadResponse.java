@@ -8,6 +8,7 @@ public record CompanyAiAnalysisPayloadResponse(
         Profile profile,
         Capabilities capabilities,
         Financials financials,
+        IndustryComparison industryComparison,
         Employment employment,
         SupportHistory supportHistory,
         Options options) {
@@ -43,6 +44,22 @@ public record CompanyAiAnalysisPayloadResponse(
             Double debtRatio,
             Double governmentRndDependency,
             Long latestRndExpense) {}
+
+    public record IndustryComparison(
+            Integer baseYear,
+            Integer latestYear,
+            Double companyChangeRate,
+            Double industryChangeRate,
+            Double gapRate,
+            List<IndustryGrowthPoint> points,
+            String summary) {}
+
+    public record IndustryGrowthPoint(
+            Integer year,
+            Double companyIndex,
+            Double industryIndex,
+            Double companyGrowthRate,
+            Double industryGrowthRate) {}
 
     public record Employment(
             Integer observationYear,
