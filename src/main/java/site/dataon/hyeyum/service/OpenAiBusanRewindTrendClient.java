@@ -156,6 +156,7 @@ public class OpenAiBusanRewindTrendClient {
                         현재 산업 현황, 과거 유사 사례, 과거/현재 지원사업 변화, RSS 뉴스 근거를 종합해 전문적으로 해석하세요.
                         briefingMarkdown은 Markdown 형식으로 작성하세요. 소제목은 쓰지 말고, 8~10개 문장 내외의 전문적인 브리핑 문단으로 구성하세요.
                         briefingMarkdown에서 뉴스 근거를 사용하는 문장 끝에는 반드시 입력된 RSS 뉴스의 기사별 링크를 Markdown 형식 [기사명](URL)로 1개 이상 붙이세요.
+                        Markdown 링크의 URL은 화면에서 괄호 안 링크로 함께 표시될 예정이므로 검증 가능한 전체 URL을 유지하세요.
                         URL은 입력된 링크를 그대로 사용하고, https://news.google.com/ 같은 루트 주소나 임의 생성 주소는 절대 사용하지 마세요.
                         briefingLines는 briefingMarkdown의 핵심 문장만 배열로 다시 제공하세요.
                         링크가 없는 내용을 단정하지 말고, 통계/지원사업 데이터 기반 참고 관점으로 표현하세요.
