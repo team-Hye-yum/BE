@@ -975,8 +975,11 @@ public class BusanRewindService {
     private Double organizationShareChange(IndustryScope industry, Period period) {
         Integer startYear = nearestOrganizationYear(industry, period.startYear(), false);
         Integer endYear = nearestOrganizationYear(industry, period.endYear(), true);
-        if (startYear == null || endYear == null || startYear.equals(endYear)) {
+        if (startYear == null || endYear == null) {
             return null;
+        }
+        if (startYear.equals(endYear)) {
+            return 0.0;
         }
 
         OrganizationRatio start = organizationRatio(industry, startYear);
@@ -1015,8 +1018,11 @@ public class BusanRewindService {
     private Double districtDistributionChange(IndustryScope industry, Period period) {
         Integer startYear = nearestDistrictStatYear(industry, period.startYear(), false);
         Integer endYear = nearestDistrictStatYear(industry, period.endYear(), true);
-        if (startYear == null || endYear == null || startYear.equals(endYear)) {
+        if (startYear == null || endYear == null) {
             return null;
+        }
+        if (startYear.equals(endYear)) {
+            return 0.0;
         }
 
         Map<String, Double> startShares = districtEmployeeShares(industry, startYear);
