@@ -2,6 +2,7 @@ package site.dataon.hyeyum.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.LocalDate;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -95,7 +96,10 @@ public class BtpSupportExcelImportService {
             if (code == null) {
                 continue;
             }
-            int selectedDateIndex = ExcelImportSupport.date(row, 7) != null || ExcelImportSupport.date(row, 8) == null ? 7 : 8;
+            LocalDate firstSelectedDate = ExcelImportSupport.date(row, 7);
+            LocalDate secondSelectedDate = firstSelectedDate == null ? ExcelImportSupport.date(row, 8) : null;
+            int selectedDateIndex = firstSelectedDate != null || secondSelectedDate == null ? 7 : 8;
+            LocalDate selectedDate = selectedDateIndex == 7 ? firstSelectedDate : secondSelectedDate;
             int selectionResultIndex = selectedDateIndex + 1;
             int supportAmountIndex = selectedDateIndex + 2;
             int startDateIndex = selectedDateIndex + 3;
@@ -111,12 +115,16 @@ public class BtpSupportExcelImportService {
             if (companyId == null) {
                 continue;
             }
+            Double supportAmount = ExcelImportSupport.decimal(row, supportAmountIndex);
+            LocalDate startDate = ExcelImportSupport.date(row, startDateIndex);
+            LocalDate endDate = ExcelImportSupport.date(row, endDateIndex);
+            Integer establishedYear = ExcelImportSupport.integer(row, establishedYearIndex);
             String sourceHash = ExcelImportSupport.hash(
                     supportYear,
                     code,
                     companyId,
-                    ExcelImportSupport.date(row, selectedDateIndex),
-                    ExcelImportSupport.integer(row, supportAmountIndex),
+                    selectedDate,
+                    supportAmount,
                     ExcelImportSupport.text(row, 6));
             jdbcTemplate.update(
                     """
@@ -131,7 +139,10 @@ public class BtpSupportExcelImportService {
                         support_type = excluded.support_type,
                         support_category = excluded.support_category,
                         support_detail = excluded.support_detail,
+                        support_item = excluded.support_item,
+                        selected_date = excluded.selected_date,
                         selection_result = excluded.selection_result,
+                        support_amount = excluded.support_amount,
                         start_date = excluded.start_date,
                         end_date = excluded.end_date,
                         industry_code = excluded.industry_code,
@@ -147,17 +158,17 @@ public class BtpSupportExcelImportService {
                     ExcelImportSupport.text(row, 4),
                     ExcelImportSupport.text(row, 5),
                     ExcelImportSupport.text(row, 6),
-                    ExcelImportSupport.date(row, selectedDateIndex),
+                    selectedDate,
                     ExcelImportSupport.text(row, selectionResultIndex),
-                    ExcelImportSupport.integer(row, supportAmountIndex),
-                    ExcelImportSupport.date(row, startDateIndex),
-                    ExcelImportSupport.date(row, endDateIndex),
+                    supportAmount,
+                    startDate,
+                    endDate,
                     companyId,
                     ExcelImportSupport.text(row, industryCodeIndex),
                     ExcelImportSupport.text(row, provinceNameIndex),
                     ExcelImportSupport.text(row, districtNameIndex),
                     ExcelImportSupport.text(row, mainProductIndex),
-                    ExcelImportSupport.integer(row, establishedYearIndex),
+                    establishedYear,
                     sourceHash);
             counter.increment("btp_support_history");
         }

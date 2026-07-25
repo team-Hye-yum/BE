@@ -33,7 +33,7 @@ public class BtpSupportProgram {
     private Long supportProgramId;
 
     @Comment("예시) A1_301")
-    @Column(name = "code", nullable = false, length = 20)
+    @Column(name = "code", nullable = false, length = 1000)
     private String code;
 
     @Comment("연도// 3개의 시트를 합칠 생각 (예시) 2022")
@@ -61,11 +61,11 @@ public class BtpSupportProgram {
     private LocalDate endDate;
 
     @Comment("부처명//예시) 산업부")
-    @Column(name = "department_name", length = 20)
+    @Column(name = "department_name", length = 1000)
     private String departmentName;
 
     @Comment("지자체//예시) 부산시")
-    @Column(name = "local_government_name", length = 20)
+    @Column(name = "local_government_name", length = 1000)
     private String localGovernmentName;
 
     @Comment("주요내용//예시) 경제 활성화")

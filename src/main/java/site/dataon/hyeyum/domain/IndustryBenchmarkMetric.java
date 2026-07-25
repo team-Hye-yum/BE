@@ -61,7 +61,7 @@ public class IndustryBenchmarkMetric {
     private BigDecimal value;
 
     @Comment("Unit: %, %P, INDEX")
-    @Column(name = "unit", length = 20)
+    @Column(name = "unit", length = 1000)
     private String unit;
 
     @Comment("Value type: LEVEL, GROWTH_RATE, REFERENCE")

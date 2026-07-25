@@ -37,12 +37,12 @@ public record CompanyAiAnalysisPayloadResponse(
 
     public record Financials(
             Integer latestYear,
-            Integer latestSalesAmount,
+            Long latestSalesAmount,
             Double salesGrowthRate,
             Double supportedSalesGrowthRate,
             Double debtRatio,
             Double governmentRndDependency,
-            Integer latestRndExpense) {}
+            Long latestRndExpense) {}
 
     public record Employment(
             Integer observationYear,

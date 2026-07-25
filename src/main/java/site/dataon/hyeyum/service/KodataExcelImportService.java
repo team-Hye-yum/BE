@@ -165,16 +165,16 @@ public class KodataExcelImportService {
         companyDataUpsertService.upsertFinancialStatistics(new FinancialStatisticsRow(
                 companyId,
                 year,
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.salesAmount(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.operatingIncome(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.costOfSales(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.netIncome(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.salesAmount(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.operatingIncome(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.costOfSales(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.netIncome(yearIndex)),
                 ExcelImportSupport.decimal(row, CompanyAnnualExcelColumns.operatingMargin(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.totalAssets(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.totalLiabilities(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.totalEquity(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.paidInCapital(yearIndex)),
-                ExcelImportSupport.integer(row, CompanyAnnualExcelColumns.researchAndDevelopmentExpense(yearIndex))));
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.totalAssets(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.totalLiabilities(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.totalEquity(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.paidInCapital(yearIndex)),
+                ExcelImportSupport.longInteger(row, CompanyAnnualExcelColumns.researchAndDevelopmentExpense(yearIndex))));
     }
 
     private void upsertPatentStatistics(Row row, Integer companyId, int year, int yearIndex) {

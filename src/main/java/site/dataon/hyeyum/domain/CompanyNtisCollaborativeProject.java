@@ -54,19 +54,19 @@ public class CompanyNtisCollaborativeProject {
     private Boolean hasOtherCollaboration;
 
     @Comment("연구형태명//예시) 위탁과제")
-    @Column(name = "research_type_name", length = 20)
+    @Column(name = "research_type_name", length = 1000)
     private String researchTypeName;
 
     @Comment("공동연구참여형태명//예시) 기타")
-    @Column(name = "collaboration_participation_type_name", length = 20)
+    @Column(name = "collaboration_participation_type_name", length = 1000)
     private String collaborationParticipationTypeName;
 
     @Comment("공동연구참여국가명//예시) 대한민국")
-    @Column(name = "collaboration_country_name", length = 20)
+    @Column(name = "collaboration_country_name", length = 1000)
     private String collaborationCountryName;
 
     @Comment("연구수행주체명//예시) 중소기업")
-    @Column(name = "research_performer_type_name", length = 20)
+    @Column(name = "research_performer_type_name", length = 1000)
     private String researchPerformerTypeName;
 
     @Comment("위탁과제연구비//예시) 67000000")

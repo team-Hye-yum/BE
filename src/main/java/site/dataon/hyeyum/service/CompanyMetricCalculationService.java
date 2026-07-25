@@ -343,10 +343,10 @@ public class CompanyMetricCalculationService {
                                 rs.getInt("company_id"),
                                 new FinancialRow(
                                         integerOrNull(rs.getObject("year")),
-                                        integerOrNull(rs.getObject("sales_amount")),
-                                        integerOrNull(rs.getObject("cost_of_sales")),
-                                        integerOrNull(rs.getObject("total_liabilities")),
-                                        integerOrNull(rs.getObject("total_equity"))));
+                                        longOrNull(rs.getObject("sales_amount")),
+                                        longOrNull(rs.getObject("cost_of_sales")),
+                                        longOrNull(rs.getObject("total_liabilities")),
+                                        longOrNull(rs.getObject("total_equity"))));
                     }
                     return rows;
                 });
@@ -879,6 +879,10 @@ public class CompanyMetricCalculationService {
         return value == null ? null : ((Number) value).intValue();
     }
 
+    private Long longOrNull(Object value) {
+        return value == null ? null : ((Number) value).longValue();
+    }
+
     private Double doubleOrNull(Object value) {
         return value == null ? null : ((Number) value).doubleValue();
     }
@@ -901,10 +905,10 @@ public class CompanyMetricCalculationService {
 
     private record FinancialRow(
             Integer year,
-            Integer salesAmount,
-            Integer costOfSales,
-            Integer totalLiabilities,
-            Integer totalEquity) {}
+            Long salesAmount,
+            Long costOfSales,
+            Long totalLiabilities,
+            Long totalEquity) {}
 
     private record EmploymentRow(
             Integer year,

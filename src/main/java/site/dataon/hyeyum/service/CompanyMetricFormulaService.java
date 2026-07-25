@@ -5,11 +5,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class CompanyMetricFormulaService {
 
-    public Double debtRatio(Integer totalLiabilities, Integer totalEquity) {
+    public Double debtRatio(Long totalLiabilities, Long totalEquity) {
         return percentage(totalLiabilities, totalEquity);
     }
 
-    public Double costOfSalesRatio(Integer costOfSales, Integer salesAmount) {
+    public Double costOfSalesRatio(Long costOfSales, Long salesAmount) {
         return percentage(costOfSales, salesAmount);
     }
 
@@ -36,16 +36,16 @@ public class CompanyMetricFormulaService {
         return (Math.pow(endValue / startValue, 1.0d / yearDiff) - 1.0d) * 100.0d;
     }
 
-    private Double percentage(Integer numerator, Integer denominator) {
+    private Double percentage(Number numerator, Number denominator) {
         Double ratio = ratio(numerator, denominator);
         return ratio == null ? null : ratio * 100.0d;
     }
 
-    private Double ratio(Integer numerator, Integer denominator) {
-        if (numerator == null || denominator == null || denominator == 0) {
+    private Double ratio(Number numerator, Number denominator) {
+        if (numerator == null || denominator == null || denominator.doubleValue() == 0.0d) {
             return null;
         }
-        return numerator / (double) denominator;
+        return numerator.doubleValue() / denominator.doubleValue();
     }
 
     private double nullToZero(Double value) {

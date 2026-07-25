@@ -157,7 +157,7 @@ public class CompanyScorecardService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기업 정보를 찾을 수 없습니다."));
     }
 
-    private String displaySalesAmount(Integer salesAmount) {
+    private String displaySalesAmount(Long salesAmount) {
         if (salesAmount == null) {
             return "데이터 없음";
         }
@@ -191,11 +191,11 @@ public class CompanyScorecardService {
         return "영업이익률 " + formatOneDecimal(operatingMargin) + "%";
     }
 
-    private Double growthPercent(Integer previous, Integer current) {
-        if (previous == null || current == null || previous == 0) {
+    private Double growthPercent(Number previous, Number current) {
+        if (previous == null || current == null || previous.doubleValue() == 0.0d) {
             return null;
         }
-        return round((current - previous) * 100.0 / previous);
+        return round((current.doubleValue() - previous.doubleValue()) * 100.0 / previous.doubleValue());
     }
 
     private Double round(Double value) {

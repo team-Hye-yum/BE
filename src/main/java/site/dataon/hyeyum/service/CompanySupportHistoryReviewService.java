@@ -610,7 +610,7 @@ public class CompanySupportHistoryReviewService {
         return value == null ? "" : value.replaceAll("\\s+", "").trim();
     }
 
-    private MoneyValue money(Integer value) {
+    private MoneyValue money(Number value) {
         return new MoneyValue(value, MoneyUnits.KRW_THOUSAND);
     }
 

@@ -37,7 +37,7 @@ public class KsicBokIndustryMapping {
     private Long mappingId;
 
     @Comment("KSIC code from KODATA, such as C29199")
-    @Column(name = "ksic_code", nullable = false, length = 20)
+    @Column(name = "ksic_code", nullable = false, length = 1000)
     private String ksicCode;
 
     @Comment("KSIC section code, such as C")

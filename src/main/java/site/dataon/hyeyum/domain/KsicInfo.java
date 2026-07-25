@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class KsicInfo {
 
     @Id
-    @Column(name = "ksic_code", nullable = false, length = 20)
+    @Column(name = "ksic_code", nullable = false, length = 1000)
     private String ksicCode;
 
     @Column(name = "industry_description", columnDefinition = "text")

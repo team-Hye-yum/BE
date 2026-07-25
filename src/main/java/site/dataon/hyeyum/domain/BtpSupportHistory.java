@@ -44,7 +44,7 @@ public class BtpSupportHistory {
     private Integer supportYear;
 
     @Comment("코드//예시) B1_311")
-    @Column(name = "code", length = 20)
+    @Column(name = "code", length = 1000)
     private String code;
 
     @Comment("부산TP 예산서의 사업명//예시) 친환경미래에너지마케팅사업")
@@ -52,11 +52,11 @@ public class BtpSupportHistory {
     private String budgetProgramName;
 
     @Comment("사업유형//예시) 사업화지원")
-    @Column(name = "support_type", length = 20)
+    @Column(name = "support_type", length = 1000)
     private String supportType;
 
     @Comment("지원구분(주요지원)//예시) 전시회")
-    @Column(name = "support_category", length = 20)
+    @Column(name = "support_category", length = 1000)
     private String supportCategory;
 
     @Comment("지원구분(추가정보)//예시) 마케팅")
@@ -72,12 +72,12 @@ public class BtpSupportHistory {
     private LocalDate selectedDate;
 
     @Comment("선정결과//예시) 지원대상")
-    @Column(name = "selection_result", length = 20)
+    @Column(name = "selection_result", length = 1000)
     private String selectionResult;
 
     @Comment("지원금(천원)//예시)  13,400")
     @Column(name = "support_amount")
-    private Integer supportAmount;
+    private Double supportAmount;
 
     @Comment("시작일//예시) 2022-09-01")
     @Column(name = "start_date")
@@ -92,15 +92,15 @@ public class BtpSupportHistory {
     private Integer companyId;
 
     @Comment("업종코드//예시) 25929")
-    @Column(name = "industry_code", length = 20)
+    @Column(name = "industry_code", length = 1000)
     private String industryCode;
 
     @Comment("광역//예시) 부산")
-    @Column(name = "province_name", length = 20)
+    @Column(name = "province_name", length = 1000)
     private String provinceName;
 
     @Comment("기초//예시) 동구")
-    @Column(name = "district_name", length = 20)
+    @Column(name = "district_name", length = 1000)
     private String districtName;
 
     @Comment("주생산품//예시) 관제장비 및 주변장치")

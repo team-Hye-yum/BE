@@ -88,7 +88,7 @@ public interface BtpSupportProgramRepository extends JpaRepository<BtpSupportPro
                     ) ntis on true
                     left join lateral (
                         select count(*)::int as support_count,
-                               coalesce(sum(support_amount), 0)::int as cumulative_support_amount,
+                               coalesce(sum(support_amount), 0) as cumulative_support_amount,
                                string_agg(distinct support_year::text, ',' order by support_year::text) as support_years
                         from btp_support_history
                         where company_id = c.company_id

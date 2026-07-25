@@ -15,7 +15,7 @@ public interface SupportProgramCompanyProjection {
 
     String getMainProduct();
 
-    Integer getLatestSalesAmount();
+    Long getLatestSalesAmount();
 
     Integer getLatestSalesYear();
 
@@ -31,7 +31,7 @@ public interface SupportProgramCompanyProjection {
 
     String getProgramName();
 
-    Integer getCumulativeSupportAmount();
+    Number getCumulativeSupportAmount();
 
     String getSupportYears();
 

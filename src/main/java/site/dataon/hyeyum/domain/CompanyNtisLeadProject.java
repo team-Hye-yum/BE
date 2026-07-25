@@ -49,7 +49,7 @@ public class CompanyNtisLeadProject {
     private String projectName;
 
     @Comment("주관부처명//예시) 농촌진흥청")
-    @Column(name = "supervising_ministry_name", length = 20)
+    @Column(name = "supervising_ministry_name", length = 1000)
     private String supervisingMinistryName;
 
     @Comment("지역구분명//예시) 부산광역시 강서구")

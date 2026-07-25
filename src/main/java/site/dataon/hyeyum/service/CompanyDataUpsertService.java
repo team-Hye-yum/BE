@@ -223,16 +223,16 @@ public class CompanyDataUpsertService {
     public record FinancialStatisticsRow(
             Integer companyId,
             Integer year,
-            Integer salesAmount,
-            Integer operatingIncome,
-            Integer costOfSales,
-            Integer netIncome,
+            Long salesAmount,
+            Long operatingIncome,
+            Long costOfSales,
+            Long netIncome,
             Double operatingMargin,
-            Integer totalAssets,
-            Integer totalLiabilities,
-            Integer totalEquity,
-            Integer paidInCapital,
-            Integer researchAndDevelopmentExpense) {}
+            Long totalAssets,
+            Long totalLiabilities,
+            Long totalEquity,
+            Long paidInCapital,
+            Long researchAndDevelopmentExpense) {}
 
     public record PatentStatisticsRow(
             Integer companyId, Integer year, Integer registeredPatentCount, Integer patentApplicationCount) {}

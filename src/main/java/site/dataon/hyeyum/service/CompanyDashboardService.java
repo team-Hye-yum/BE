@@ -163,7 +163,7 @@ public class CompanyDashboardService {
     public ApiDataResponse<IncomeStatementsResponse> incomeStatements(Integer companyId) {
         Company company = findCompany(companyId);
         List<CompanyFinancialStatistics> statistics = financialStatisticsRepository.findByCompanyIdOrderByYearAsc(companyId);
-        Map<Integer, Integer> salesByYear = new HashMap<>();
+        Map<Integer, Long> salesByYear = new HashMap<>();
         statistics.forEach(stat -> salesByYear.put(stat.getYear(), stat.getSalesAmount()));
         List<IncomeStatementPoint> series = statistics.stream()
                 .map(stat -> new IncomeStatementPoint(
@@ -366,7 +366,7 @@ public class CompanyDashboardService {
     public ApiDataResponse<GrowthScenarioResponse> growthScenario(Integer companyId) {
         findCompany(companyId);
         List<CompanyFinancialStatistics> financials = financialStatisticsRepository.findByCompanyIdOrderByYearAsc(companyId);
-        Map<Integer, Integer> salesByYear = new HashMap<>();
+        Map<Integer, Long> salesByYear = new HashMap<>();
         Map<Integer, CompanyFinancialStatistics> financialsByYear = new HashMap<>();
         financials.stream()
                 .filter(stat -> stat.getYear() != null)
@@ -441,11 +441,11 @@ public class CompanyDashboardService {
         return lines;
     }
 
-    private Map<Integer, Double> companyIndexByYear(Map<Integer, Integer> salesByYear) {
-        Integer baseSales = salesByYear.get(BASE_YEAR);
+    private Map<Integer, Double> companyIndexByYear(Map<Integer, Long> salesByYear) {
+        Long baseSales = salesByYear.get(BASE_YEAR);
         Map<Integer, Double> indexes = new HashMap<>();
         for (int year = BASE_YEAR; year <= LAST_OBSERVED_YEAR; year++) {
-            Integer sales = salesByYear.get(year);
+            Long sales = salesByYear.get(year);
             indexes.put(year, baseSales == null || baseSales == 0 || sales == null
                     ? null
                     : round(sales * 100.0 / baseSales));
@@ -453,7 +453,7 @@ public class CompanyDashboardService {
         return indexes;
     }
 
-    private Map<Integer, Double> companyGrowthRateByYear(Map<Integer, Integer> salesByYear) {
+    private Map<Integer, Double> companyGrowthRateByYear(Map<Integer, Long> salesByYear) {
         Map<Integer, Double> rates = new HashMap<>();
         for (int year = BASE_YEAR + 1; year <= LAST_OBSERVED_YEAR; year++) {
             rates.put(year, growthPercent(salesByYear.get(year - 1), salesByYear.get(year)));
@@ -638,11 +638,11 @@ public class CompanyDashboardService {
         return (values.get(middle - 1) + values.get(middle)) / 2;
     }
 
-    private Double growthPercent(Integer previous, Integer current) {
-        if (previous == null || current == null || previous == 0) {
+    private Double growthPercent(Number previous, Number current) {
+        if (previous == null || current == null || previous.doubleValue() == 0.0d) {
             return null;
         }
-        return round((current - previous) * 100.0 / previous);
+        return round((current.doubleValue() - previous.doubleValue()) * 100.0 / previous.doubleValue());
     }
 
     private Double round(Double value) {

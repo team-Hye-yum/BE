@@ -22,7 +22,7 @@ public class Company {
     private Integer companyId;
 
     @Comment("지역//예시) 부산")
-    @Column(name = "region_name", length = 20)
+    @Column(name = "region_name", length = 1000)
     private String regionName;
 
     @Comment("설립일자//예시) 20100202")
@@ -30,23 +30,23 @@ public class Company {
     private LocalDate establishedDate;
 
     @Comment("기업유형(법입/개인)//예시) 법인기업")
-    @Column(name = "business_entity_type", length = 20)
+    @Column(name = "business_entity_type", length = 1000)
     private String businessEntityType;
 
     @Comment("기업유형(법입/개인)//예시) 소상공인")
-    @Column(name = "company_size", length = 20)
+    @Column(name = "company_size", length = 1000)
     private String companySize;
 
     @Comment("기업공개(코스피,코스닥)//예시) 일반법인")
-    @Column(name = "listing_status", length = 20)
+    @Column(name = "listing_status", length = 1000)
     private String listingStatus;
 
     @Comment("기업형태 (주식/개인)//예시) 주식회사")
-    @Column(name = "company_type", length = 20)
+    @Column(name = "company_type", length = 1000)
     private String companyType;
 
     @Comment("KSIC코드 (11차)//예시) C21309")
-    @Column(name = "ksic_code", length = 20)
+    @Column(name = "ksic_code", length = 1000)
     private String ksicCode;
 
     @Comment("업종명 (11차)//예시) 그 외 기타 의료용품 및 의약 관련제품 제조업")
@@ -74,11 +74,11 @@ public class Company {
     private LocalDate referenceDate;
 
     @Comment("휴폐업구분//예시) 부가가치세 일반과세자")
-    @Column(name = "closure_type", length = 20)
+    @Column(name = "closure_type", length = 1000)
     private String closureType;
 
     @Comment("기업상태//예시) 정상")
-    @Column(name = "company_status", length = 20)
+    @Column(name = "company_status", length = 1000)
     private String companyStatus;
 
     @Comment("이노비즈 여부//예시) 유")
@@ -158,11 +158,11 @@ public class Company {
     private Double employeeTurnoverRate;
 
     @Comment("기업명//우리가 만들어야함 (예시)")
-    @Column(name = "company_name", length = 20)
+    @Column(name = "company_name", length = 1000)
     private String companyName;
 
     @Comment("사업자등록번호//우리가 만들어야함 (예시)")
-    @Column(name = "business_registration_number", length = 20)
+    @Column(name = "business_registration_number", length = 1000)
     private String businessRegistrationNumber;
 
     @Comment("위치//우리가 가공해야 함 (예시)")

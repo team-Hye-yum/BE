@@ -37,11 +37,11 @@ public class CompanyPatent {
     private Integer companyId;
 
     @Comment("특허권//예시) 특허권")
-    @Column(name = "patent_type", length = 20)
+    @Column(name = "patent_type", length = 1000)
     private String patentType;
 
     @Comment("등록상태//예시) 등록")
-    @Column(name = "registration_status", length = 20)
+    @Column(name = "registration_status", length = 1000)
     private String registrationStatus;
 
     @Comment("등록상태//예시) 20090220")
@@ -53,7 +53,7 @@ public class CompanyPatent {
     private LocalDate registrationDate;
 
     @Comment("등록상태//예시) 본인")
-    @Column(name = "company_relation_code", length = 20)
+    @Column(name = "company_relation_code", length = 1000)
     private String companyRelationCode;
 
     @Comment("등록상태//예시) Y")

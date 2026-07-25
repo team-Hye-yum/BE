@@ -27,10 +27,10 @@ public final class CompanyDashboardResponses {
 
     public record FinancialPositionPoint(
             Integer year,
-            Integer totalAssets,
-            Integer totalLiabilities,
-            Integer totalEquity,
-            Integer paidInCapital,
+            Long totalAssets,
+            Long totalLiabilities,
+            Long totalEquity,
+            Long paidInCapital,
             DebtRatioDerived derived) {}
 
     public record DebtRatioDerived(Double debtRatio) {}
@@ -39,12 +39,12 @@ public final class CompanyDashboardResponses {
 
     public record IncomeStatementPoint(
             Integer year,
-            Integer salesAmount,
-            Integer costOfSales,
-            Integer operatingProfitLoss,
-            Integer netIncomeLoss,
+            Long salesAmount,
+            Long costOfSales,
+            Long operatingProfitLoss,
+            Long netIncomeLoss,
             Double operatingProfitMargin,
-            Integer researchAndDevelopmentExpense,
+            Long researchAndDevelopmentExpense,
             IncomeStatementDerived derived) {}
 
     public record IncomeStatementDerived(Double salesYoYGrowthRate, Double costOfSalesRatio) {}
@@ -158,14 +158,14 @@ public final class CompanyDashboardResponses {
             String programType,
             String startDate,
             String endDate,
-            Integer supportAmount,
+            Double supportAmount,
             String supportAmountUnit,
             Integer markerYear,
             Integer markerMonth,
             MetricsAtMarker metricsAtMarker) {}
 
     public record MetricsAtMarker(
-            Integer researchAndDevelopmentExpense,
+            Long researchAndDevelopmentExpense,
             Double operatingProfitMargin,
             Integer employeeCount) {}
 

@@ -29,7 +29,7 @@ public class CompanyIndustryBenchmarkMapping {
     private Integer companyId;
 
     @Comment("KSIC code copied from company")
-    @Column(name = "ksic_code", length = 20)
+    @Column(name = "ksic_code", length = 1000)
     private String ksicCode;
 
     @Comment("Mapped BOK industry code")
