@@ -247,6 +247,9 @@ public class BusanRewindService {
                         industry.divisionCode(),
                         industry.divisionName(),
                         "AI 종합 검토 브리핑",
+                        defaultText(
+                                aiBriefing.briefingMarkdown(),
+                                fallbackBriefingMarkdown(industry, currentStatus, similarFlow, supportComparison, evidenceNews)),
                         withFallback(aiBriefing.briefingLines(), fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews)),
                         evidenceNews,
                         screenText(
@@ -723,7 +726,7 @@ public class BusanRewindService {
         OpenAiIndustryKeywordClient.IndustryNewsKeywords newsKeywords =
                 openAiIndustryKeywordClient.generate(industry.divisionCode(), industry.divisionName());
         return googleNewsRssClient.searchIndustryEvidenceNews(industry.divisionName(), newsKeywords).stream()
-                .filter(item -> item.link() != null && !item.link().isBlank())
+                .filter(item -> isUsefulNewsLink(item.link()))
                 .map(item -> new IndustryEvidenceNews(
                         normalizeNewsDate(item.publishedAt()),
                         inferIndustryChange(item.title()),
@@ -732,6 +735,13 @@ public class BusanRewindService {
                         "Google News RSS"))
                 .limit(6)
                 .toList();
+    }
+
+    private boolean isUsefulNewsLink(String link) {
+        String value = nullToEmpty(link).trim();
+        return !value.isBlank()
+                && !"https://news.google.com/".equals(value)
+                && !"http://news.google.com/".equals(value);
     }
 
     private String currentStatusText(CurrentStatus status) {
@@ -792,10 +802,20 @@ public class BusanRewindService {
                 industry.divisionCode(),
                 industry.divisionName(),
                 "AI 종합 검토 브리핑",
+                fallbackBriefingMarkdown(industry, currentStatus, similarFlow, supportComparison, evidenceNews),
                 fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews),
                 evidenceNews,
                 fallbackNewsSynthesis(industry, currentStatus, evidenceNews),
                 "RULE_BASED_RSS");
+    }
+
+    private String fallbackBriefingMarkdown(
+            IndustryScope industry,
+            CurrentStatus currentStatus,
+            SimilarFlow similarFlow,
+            SupportComparison supportComparison,
+            List<IndustryEvidenceNews> evidenceNews) {
+        return String.join("\n\n", fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews));
     }
 
     private List<String> fallbackBriefingLines(

@@ -93,6 +93,7 @@ public class OpenAiBusanRewindTrendClient {
             }
             JsonNode result = objectMapper.readTree(outputText);
             return new ComprehensiveBriefing(
+                    limited(result.path("briefingMarkdown").asText(""), 2000),
                     stringList(result.path("briefingLines"), 10),
                     limited(result.path("newsSynthesis").asText(""), 700));
         } catch (IOException | RuntimeException exception) {
@@ -153,8 +154,10 @@ public class OpenAiBusanRewindTrendClient {
                         """
                         부산 산업·지원사업 검토 담당자를 위한 'AI 종합 검토 브리핑'을 작성하세요.
                         현재 산업 현황, 과거 유사 사례, 과거/현재 지원사업 변화, RSS 뉴스 근거를 종합해 전문적으로 해석하세요.
-                        briefingLines는 8~10개 문장으로 작성하고, 각 문장은 독립적인 완성 문장이어야 합니다.
-                        뉴스 근거를 사용하는 문장 끝에는 반드시 입력된 RSS 뉴스 링크를 Markdown 형식 [기사](URL)로 1개 이상 붙이세요.
+                        briefingMarkdown은 Markdown 형식으로 작성하세요. 소제목은 쓰지 말고, 8~10개 문장 내외의 전문적인 브리핑 문단으로 구성하세요.
+                        briefingMarkdown에서 뉴스 근거를 사용하는 문장 끝에는 반드시 입력된 RSS 뉴스의 기사별 링크를 Markdown 형식 [기사명](URL)로 1개 이상 붙이세요.
+                        URL은 입력된 링크를 그대로 사용하고, https://news.google.com/ 같은 루트 주소나 임의 생성 주소는 절대 사용하지 마세요.
+                        briefingLines는 briefingMarkdown의 핵심 문장만 배열로 다시 제공하세요.
                         링크가 없는 내용을 단정하지 말고, 통계/지원사업 데이터 기반 참고 관점으로 표현하세요.
                         지원 여부, 선정 가능성, 평가 결과, 정책 우선순위는 판단하지 마세요.
                         마지막 문장은 반드시 참고자료 성격과 한계를 설명하세요.
@@ -302,12 +305,14 @@ public class OpenAiBusanRewindTrendClient {
                         false,
                         "properties",
                         Map.of(
+                                "briefingMarkdown",
+                                stringType,
                                 "briefingLines",
                                 Map.of("type", "array", "items", stringType, "minItems", 8, "maxItems", 10),
                                 "newsSynthesis",
                                 stringType),
                         "required",
-                        new String[] {"briefingLines", "newsSynthesis"}));
+                        new String[] {"briefingMarkdown", "briefingLines", "newsSynthesis"}));
     }
 
     private OpenAiApiException openAiApiException(int statusCode, String responseBody) {
@@ -427,5 +432,6 @@ public class OpenAiBusanRewindTrendClient {
             String supportComparisonText,
             List<IndustryEvidenceNews> evidenceNews) {}
 
-    public record ComprehensiveBriefing(List<String> briefingLines, String newsSynthesis) {}
+    public record ComprehensiveBriefing(
+            String briefingMarkdown, List<String> briefingLines, String newsSynthesis) {}
 }

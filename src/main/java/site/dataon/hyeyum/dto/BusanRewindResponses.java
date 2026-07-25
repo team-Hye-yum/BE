@@ -119,6 +119,7 @@ public final class BusanRewindResponses {
             String industryCode,
             String industryName,
             String title,
+            String briefingMarkdown,
             List<String> briefingLines,
             List<IndustryEvidenceNews> evidenceNews,
             String newsSynthesis,

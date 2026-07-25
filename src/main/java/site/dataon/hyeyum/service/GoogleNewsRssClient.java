@@ -53,7 +53,7 @@ public class GoogleNewsRssClient {
         Set<String> seenLinks = new LinkedHashSet<>();
         for (String query : evidenceQueries(industryName, keywords)) {
             for (NaverNewsSearchClient.NaverNewsItem item : search(query)) {
-                if (seenLinks.add(item.link())) {
+                if (isUsableNewsLink(item.link()) && seenLinks.add(item.link())) {
                     items.add(item);
                 }
                 if (items.size() >= display) {
@@ -123,6 +123,13 @@ public class GoogleNewsRssClient {
         }
         addQuery(queries, industryName + " 산업 동향 투자 수요 인력 친환경 디지털");
         return queries.stream().limit(8).toList();
+    }
+
+    private boolean isUsableNewsLink(String link) {
+        String value = link == null ? "" : link.trim();
+        return !value.isBlank()
+                && !"https://news.google.com/".equals(value)
+                && !"http://news.google.com/".equals(value);
     }
 
     private void addQuery(Set<String> queries, String query) {
