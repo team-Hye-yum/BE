@@ -817,8 +817,7 @@ public class BusanRewindService {
             List<IndustryEvidenceNews> evidenceNews) {
         String firstLink = evidenceNews.isEmpty() ? "" : " [" + evidenceNews.get(0).title() + "](" + evidenceNews.get(0).link() + ")";
         String secondLink = evidenceNews.size() < 2 ? firstLink : " [" + evidenceNews.get(1).title() + "](" + evidenceNews.get(1).link() + ")";
-        return String.join(
-                "\n\n",
+        List<String> markdownParts = new ArrayList<>(List.of(
                 "## 현재 산업 현황",
                 "- **"
                         + industry.divisionName()
@@ -841,13 +840,70 @@ public class BusanRewindService {
                         + "** 항목을 중심으로 재편되어 있습니다.",
                 "- 기업 검토 시에는 산업 전체 성장 흐름과 현재 지원 분야의 연결성을 함께 확인할 수 있습니다."
                         + firstLink,
-                "## 검토 포인트",
-                "- 기업별 **매출액, 영업이익률, 부채비율, 자산/부채/자본**을 함께 확인해 성장성과 재무 부담을 같이 검토할 필요가 있습니다.",
-                "- 수요 확대 산업에서는 **종사자수 변화, R&D 비용, 특허·인증, 연구·활동, 디지털 전환 근거**를 함께 보면 실행 역량을 판단하는 데 도움이 됩니다."
-                        + secondLink,
-                "- 과거 지원사업과 **중복지원 이력**은 동일 목적의 반복 지원인지, 단계적 고도화인지 구분하는 참고 지표로 활용할 수 있습니다.",
+                "## 검토 포인트"));
+        markdownParts.addAll(selectedReviewPoints(currentStatus, supportComparison, evidenceNews, secondLink));
+        markdownParts.addAll(List.of(
                 "## 참고 근거와 한계",
-                "- 본 브리핑은 산업 동향, 과거 지원 이력, RSS 뉴스를 종합한 참고자료이며 지원 여부나 평가 결과를 제시하지 않습니다.");
+                "- 본 브리핑은 산업 동향, 과거 지원 이력, RSS 뉴스를 종합한 참고자료이며 지원 여부나 평가 결과를 제시하지 않습니다."));
+        return String.join("\n\n", markdownParts);
+    }
+
+    private List<String> selectedReviewPoints(
+            CurrentStatus currentStatus,
+            SupportComparison supportComparison,
+            List<IndustryEvidenceNews> evidenceNews,
+            String evidenceLink) {
+        List<ScoredText> candidates = new ArrayList<>();
+        Double employeeGrowthRate = currentStatus.employeeGrowthRate();
+        String signalText = String.join(
+                " ",
+                String.join(" ", supportComparison.currentFields()),
+                String.join(" ", supportComparison.newFields()),
+                String.join(" ", supportComparison.trendKeywords()),
+                evidenceNews.stream()
+                        .map(item -> item.industryChange() + " " + item.title())
+                        .reduce((left, right) -> left + " " + right)
+                        .orElse(""));
+
+        if (employeeGrowthRate != null) {
+            candidates.add(new ScoredText(
+                    Math.abs(employeeGrowthRate) + 40,
+                    "- **종사자수 변화**는 현재 산업 흐름에서 가장 먼저 볼 지표입니다. 기업별 고용 증감이 매출 흐름과 같은 방향인지 확인하면 실행 역량을 더 분명하게 볼 수 있습니다."));
+        }
+        if (containsAny(signalText, "R&D", "연구", "기술", "특허", "인증", "AI", "디지털", "스마트")) {
+            candidates.add(new ScoredText(
+                    90,
+                    "- **R&D 비용과 특허·인증 근거**를 우선 확인하는 것이 좋습니다. 현재 지원 분야가 기술 전환 쪽으로 움직이는 경우, 실제 연구·활동 데이터가 사업 적합성을 해석하는 핵심 보조자료가 됩니다."
+                            + evidenceLink));
+        }
+        if (containsAny(signalText, "사업화", "판로", "수출", "마케팅", "시장", "수요", "투자")) {
+            candidates.add(new ScoredText(
+                    80,
+                    "- **매출액과 영업이익률**을 먼저 비교해 볼 수 있습니다. 수요 확대나 사업화 지원 신호가 강할 때는 매출 규모뿐 아니라 이익 흐름이 함께 따라오는지 확인하는 것이 중요합니다."
+                            + evidenceLink));
+        }
+        if (containsAny(signalText, "설비", "장비", "공정", "탄소", "친환경", "ESG")) {
+            candidates.add(new ScoredText(
+                    70,
+                    "- **부채비율과 자산·부채 구조**를 함께 보는 것이 좋습니다. 설비·공정 전환 성격이 강한 산업에서는 투자 여력과 재무 부담을 같이 확인해야 해석이 안정적입니다."));
+        }
+        if (!supportComparison.pastFields().isEmpty() || !supportComparison.currentFields().isEmpty()) {
+            candidates.add(new ScoredText(
+                    55,
+                    "- **과거 지원이력과 중복지원 이력**은 동일 목적의 반복인지, 이전 지원 이후 단계적 고도화인지 구분하는 참고 지표로 활용할 수 있습니다."));
+        }
+        if (candidates.isEmpty()) {
+            candidates.add(new ScoredText(
+                    1,
+                    "- **매출액과 종사자수 변화**를 우선 확인하는 것이 좋습니다. 산업 통계만으로는 개별 기업의 성장 흐름을 단정하기 어려우므로 기본 실적과 고용 흐름을 먼저 맞춰볼 수 있습니다."));
+        }
+
+        return candidates.stream()
+                .sorted((left, right) -> Double.compare(right.score(), left.score()))
+                .map(ScoredText::text)
+                .distinct()
+                .limit(3)
+                .toList();
     }
 
     private List<String> fallbackBriefingLines(
@@ -915,6 +971,16 @@ public class BusanRewindService {
             return fallback;
         }
         return String.join(", ", values.stream().limit(3).toList());
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        String value = nullToEmpty(text);
+        for (String keyword : keywords) {
+            if (value.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<String> fallbackDomesticIssues(Double latestGrowthRate) {
@@ -1756,4 +1822,6 @@ public class BusanRewindService {
     private record YearRange(Integer startYear, Integer endYear) {}
 
     private record Match(Integer startYear, Integer endYear, Double distance) {}
+
+    private record ScoredText(double score, String text) {}
 }
