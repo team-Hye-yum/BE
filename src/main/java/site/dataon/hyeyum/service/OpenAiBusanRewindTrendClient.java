@@ -154,7 +154,12 @@ public class OpenAiBusanRewindTrendClient {
                         """
                         부산 산업·지원사업 검토 담당자를 위한 'AI 종합 검토 브리핑'을 작성하세요.
                         현재 산업 현황, 과거 유사 사례, 과거/현재 지원사업 변화, RSS 뉴스 근거를 종합해 전문적으로 해석하세요.
-                        briefingMarkdown은 Markdown 형식으로 작성하세요. 소제목은 쓰지 말고, 8~10개 문장 내외의 전문적인 브리핑 문단으로 구성하세요.
+                        briefingMarkdown은 Markdown 형식으로 작성하세요.
+                        ## 현재 산업 현황, ## 과거 유사 사례, ## 지원사업 검토 관점, ## DB 검토 포인트, ## 참고 근거와 한계 소제목을 포함하세요.
+                        각 소제목 아래에는 2~3개 문장 또는 bullet을 작성하고, 전체는 10줄 내외의 전문적인 브리핑으로 구성하세요.
+                        DB 검토 포인트에는 기업 DB에서 우선 확인하면 좋은 항목을 안내하세요.
+                        활용 가능한 DB 항목 예시는 매출액, 영업이익률, 부채비율, 자산/부채/자본, 종사자수 변화, R&D 비용, 특허·인증, 연구·활동, 과거 지원이력, 중복지원 이력입니다.
+                        예시는 "부채비율이 낮은 기업을 지원 추천"처럼 선정 결론을 쓰지 말고, "부채비율과 현금흐름을 함께 확인할 필요가 있습니다"처럼 검토 지표 안내로 작성하세요.
                         briefingMarkdown에서 뉴스 근거를 사용하는 문장 끝에는 반드시 입력된 RSS 뉴스의 기사별 링크를 Markdown 형식 [기사명](URL)로 1개 이상 붙이세요.
                         Markdown 링크는 화면에서 기사명을 괄호로 감싼 형태로 표시될 예정이므로, 기사명은 짧고 출처를 식별할 수 있게 작성하세요.
                         URL은 입력된 링크를 그대로 사용하고, https://news.google.com/ 같은 루트 주소나 임의 생성 주소는 절대 사용하지 마세요.
@@ -212,6 +217,11 @@ public class OpenAiBusanRewindTrendClient {
         builder.append("[과거 유사 사례]\n").append(request.similarFlowText()).append("\n\n");
         builder.append("[과거 지원사업 및 지원기업 변화]\n").append(request.pastSupportReviewText()).append("\n\n");
         builder.append("[과거-현재 지원사업 비교]\n").append(request.supportComparisonText()).append("\n\n");
+        builder.append("[기업 DB 검토 가능 항목]\n");
+        builder.append("- 재무: 매출액, 영업이익률, 부채비율, 자산, 부채, 자본\n");
+        builder.append("- 고용: 종사자수, 전년 대비 고용 증감\n");
+        builder.append("- 혁신/활동: R&D 비용, 연구·활동, 특허·인증, 디지털 전환 근거\n");
+        builder.append("- 지원 이력: 과거 지원사업, 중복지원 이력, 신청일자와 지원분야\n\n");
         builder.append("[산업 변화 근거 뉴스 - RSS]\n");
         if (request.evidenceNews().isEmpty()) {
             builder.append("- 수집 결과 없음\n");

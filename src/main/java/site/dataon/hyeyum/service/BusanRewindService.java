@@ -815,7 +815,39 @@ public class BusanRewindService {
             SimilarFlow similarFlow,
             SupportComparison supportComparison,
             List<IndustryEvidenceNews> evidenceNews) {
-        return String.join("\n\n", fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews));
+        String firstLink = evidenceNews.isEmpty() ? "" : " [" + evidenceNews.get(0).title() + "](" + evidenceNews.get(0).link() + ")";
+        String secondLink = evidenceNews.size() < 2 ? firstLink : " [" + evidenceNews.get(1).title() + "](" + evidenceNews.get(1).link() + ")";
+        return String.join(
+                "\n\n",
+                "## 현재 산업 현황",
+                "- **"
+                        + industry.divisionName()
+                        + "**은 현재 산업 통계와 지원사업 키워드를 함께 놓고 검토할 필요가 있습니다."
+                        + firstLink,
+                "- 최근 기준 종사자 성장률은 **"
+                        + nullableText(currentStatus.employeeGrowthRate(), "확인 제한")
+                        + "%**로 확인됩니다.",
+                "## 과거 유사 사례",
+                "- 과거 유사 흐름은 **"
+                        + similarFlow.flowType()
+                        + "** 유형으로 분류되며, "
+                        + defaultText(similarFlow.summary(), "비교 가능한 시계열이 제한적입니다."),
+                "- 과거 지원사업은 **"
+                        + joinLimited(supportComparison.pastFields(), "확인 제한")
+                        + "** 중심으로 나타납니다.",
+                "## 지원사업 검토 관점",
+                "- 현재 지원사업은 **"
+                        + joinLimited(supportComparison.currentFields(), "확인 제한")
+                        + "** 항목을 중심으로 재편되어 있습니다.",
+                "- 기업 검토 시에는 산업 전체 성장 흐름과 현재 지원 분야의 연결성을 함께 확인할 수 있습니다."
+                        + firstLink,
+                "## DB 검토 포인트",
+                "- 기업별 **매출액, 영업이익률, 부채비율, 자산/부채/자본**을 함께 확인해 성장성과 재무 부담을 같이 검토할 필요가 있습니다.",
+                "- 수요 확대 산업에서는 **종사자수 변화, R&D 비용, 특허·인증, 연구·활동, 디지털 전환 근거**를 함께 보면 실행 역량을 판단하는 데 도움이 됩니다."
+                        + secondLink,
+                "- 과거 지원사업과 **중복지원 이력**은 동일 목적의 반복 지원인지, 단계적 고도화인지 구분하는 참고 지표로 활용할 수 있습니다.",
+                "## 참고 근거와 한계",
+                "- 본 브리핑은 산업 동향, 과거 지원 이력, RSS 뉴스를 종합한 참고자료이며 지원 여부나 평가 결과를 제시하지 않습니다.");
     }
 
     private List<String> fallbackBriefingLines(
