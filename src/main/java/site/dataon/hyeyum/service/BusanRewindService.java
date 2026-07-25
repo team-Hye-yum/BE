@@ -973,17 +973,13 @@ public class BusanRewindService {
     }
 
     private Double organizationShareChange(IndustryScope industry, Period period) {
-        Integer startYear = nearestOrganizationYear(industry, period.startYear(), false);
-        Integer endYear = nearestOrganizationYear(industry, period.endYear(), true);
-        if (startYear == null || endYear == null) {
+        YearRange years = comparableOrganizationYears(industry, period);
+        if (years == null || years.startYear().equals(years.endYear())) {
             return null;
         }
-        if (startYear.equals(endYear)) {
-            return 0.0;
-        }
 
-        OrganizationRatio start = organizationRatio(industry, startYear);
-        OrganizationRatio end = organizationRatio(industry, endYear);
+        OrganizationRatio start = organizationRatio(industry, years.startYear());
+        OrganizationRatio end = organizationRatio(industry, years.endYear());
         Double startCorporationShare = corporationShare(start);
         Double endCorporationShare = corporationShare(end);
         if (startCorporationShare == null || endCorporationShare == null) {
@@ -992,7 +988,7 @@ public class BusanRewindService {
         return round(endCorporationShare - startCorporationShare);
     }
 
-    private Integer nearestOrganizationYear(IndustryScope industry, int targetYear, boolean preferAfter) {
+    private YearRange comparableOrganizationYears(IndustryScope industry, Period period) {
         List<Integer> years = jdbcTemplate.query(
                 """
                 select distinct year
@@ -1004,7 +1000,7 @@ public class BusanRewindService {
                 """,
                 (rs, rowNum) -> rs.getInt("year"),
                 industry.sectionCode());
-        return nearestYear(years, targetYear, preferAfter);
+        return comparableYearRange(years, period);
     }
 
     private Double corporationShare(OrganizationRatio ratio) {
@@ -1016,17 +1012,13 @@ public class BusanRewindService {
     }
 
     private Double districtDistributionChange(IndustryScope industry, Period period) {
-        Integer startYear = nearestDistrictStatYear(industry, period.startYear(), false);
-        Integer endYear = nearestDistrictStatYear(industry, period.endYear(), true);
-        if (startYear == null || endYear == null) {
+        YearRange years = comparableDistrictStatYears(industry, period);
+        if (years == null || years.startYear().equals(years.endYear())) {
             return null;
         }
-        if (startYear.equals(endYear)) {
-            return 0.0;
-        }
 
-        Map<String, Double> startShares = districtEmployeeShares(industry, startYear);
-        Map<String, Double> endShares = districtEmployeeShares(industry, endYear);
+        Map<String, Double> startShares = districtEmployeeShares(industry, years.startYear());
+        Map<String, Double> endShares = districtEmployeeShares(industry, years.endYear());
         if (startShares.isEmpty() || endShares.isEmpty()) {
             return null;
         }
@@ -1040,7 +1032,7 @@ public class BusanRewindService {
         return round(absoluteDifferenceSum / 2.0);
     }
 
-    private Integer nearestDistrictStatYear(IndustryScope industry, int targetYear, boolean preferAfter) {
+    private YearRange comparableDistrictStatYears(IndustryScope industry, Period period) {
         List<Integer> years = jdbcTemplate.query(
                 """
                 select distinct year
@@ -1054,7 +1046,7 @@ public class BusanRewindService {
                 """,
                 (rs, rowNum) -> rs.getInt("year"),
                 industry.sectionCode());
-        return nearestYear(years, targetYear, preferAfter);
+        return comparableYearRange(years, period);
     }
 
     private Map<String, Double> districtEmployeeShares(IndustryScope industry, Integer year) {
@@ -1103,6 +1095,19 @@ public class BusanRewindService {
         return years.stream()
                 .min((left, right) -> Integer.compare(Math.abs(left - targetYear), Math.abs(right - targetYear)))
                 .orElse(null);
+    }
+
+    private YearRange comparableYearRange(List<Integer> years, Period period) {
+        List<Integer> distinctYears = years.stream().distinct().sorted().toList();
+        if (distinctYears.size() < 2) {
+            return null;
+        }
+        Integer startYear = nearestYear(distinctYears, period.startYear(), false);
+        Integer endYear = nearestYear(distinctYears, period.endYear(), true);
+        if (startYear == null || endYear == null || startYear.equals(endYear)) {
+            return new YearRange(distinctYears.get(0), distinctYears.get(distinctYears.size() - 1));
+        }
+        return startYear < endYear ? new YearRange(startYear, endYear) : new YearRange(endYear, startYear);
     }
 
     private List<PastSupportProgram> pastSupportPrograms(IndustryScope industry, Period period) {
@@ -1237,10 +1242,10 @@ public class BusanRewindService {
                             c.company_id,
                             c.company_name,
                             s.support_year,
-                            emp_before.employee_count as employee_before,
-                            coalesce(emp_after_next.employee_count, emp_after_current.employee_count) as employee_after,
-                            fin_before.sales_amount as sales_before,
-                            coalesce(fin_after_next.sales_amount, fin_after_current.sales_amount) as sales_after,
+                            coalesce(emp_before.employee_count, emp_nearest.employee_count) as employee_before,
+                            coalesce(emp_after_next.employee_count, emp_after_current.employee_count, emp_nearest.employee_count) as employee_after,
+                            coalesce(fin_before.sales_amount, fin_nearest.sales_amount) as sales_before,
+                            coalesce(fin_after_next.sales_amount, fin_after_current.sales_amount, fin_nearest.sales_amount) as sales_after,
                             s.main_product as activity_change,
                             coalesce(fin_after_next.research_and_development_expense, fin_after_current.research_and_development_expense) as rnd_after
                         from supported s
@@ -1266,6 +1271,13 @@ public class BusanRewindService {
                             limit 1
                         ) emp_after_current on true
                         left join lateral (
+                            select employee_count
+                            from company_employment_statistics
+                            where company_id = s.company_id and employee_count is not null
+                            order by abs(year - s.support_year), year desc
+                            limit 1
+                        ) emp_nearest on true
+                        left join lateral (
                             select sales_amount
                             from company_financial_statistics
                             where company_id = s.company_id and year < s.support_year
@@ -1285,6 +1297,13 @@ public class BusanRewindService {
                             where company_id = s.company_id and year = s.support_year
                             limit 1
                         ) fin_after_current on true
+                        left join lateral (
+                            select sales_amount
+                            from company_financial_statistics
+                            where company_id = s.company_id and sales_amount is not null
+                            order by abs(year - s.support_year), year desc
+                            limit 1
+                        ) fin_nearest on true
                         order by c.company_id
                         limit 3
                         """,
@@ -1488,6 +1507,8 @@ public class BusanRewindService {
             String announceUrl) {}
 
     private record YearValue(Integer year, Double value) {}
+
+    private record YearRange(Integer startYear, Integer endYear) {}
 
     private record Match(Integer startYear, Integer endYear, Double distance) {}
 }
