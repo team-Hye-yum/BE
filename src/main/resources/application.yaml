@@ -56,6 +56,10 @@ google:
   news:
     display: ${GOOGLE_NEWS_DISPLAY:10}
 
+ecos:
+  api-key: ${ECOS_API_KEY:}
+  base-url: ${ECOS_BASE_URL:https://ecos.bok.or.kr/api}
+
 support-program-search:
   elasticsearch:
     enabled: ${SUPPORT_PROGRAM_SEARCH_ELASTICSEARCH_ENABLED:true}

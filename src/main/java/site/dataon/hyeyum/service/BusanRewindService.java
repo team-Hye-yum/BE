@@ -62,23 +62,28 @@ public class BusanRewindService {
             Map.entry("사상구", "26530"),
             Map.entry("기장군", "26710"));
 
+    private static final int ECOS_GROWTH_HISTORY_START_YEAR = 2010;
+
     private final JdbcTemplate jdbcTemplate;
     private final NaverNewsSearchClient naverNewsSearchClient;
     private final GoogleNewsRssClient googleNewsRssClient;
     private final OpenAiIndustryKeywordClient openAiIndustryKeywordClient;
     private final OpenAiBusanRewindTrendClient openAiBusanRewindTrendClient;
+    private final EcosIndustryGrowthClient ecosIndustryGrowthClient;
 
     public BusanRewindService(
             JdbcTemplate jdbcTemplate,
             NaverNewsSearchClient naverNewsSearchClient,
             GoogleNewsRssClient googleNewsRssClient,
             OpenAiIndustryKeywordClient openAiIndustryKeywordClient,
-            OpenAiBusanRewindTrendClient openAiBusanRewindTrendClient) {
+            OpenAiBusanRewindTrendClient openAiBusanRewindTrendClient,
+            EcosIndustryGrowthClient ecosIndustryGrowthClient) {
         this.jdbcTemplate = jdbcTemplate;
         this.naverNewsSearchClient = naverNewsSearchClient;
         this.googleNewsRssClient = googleNewsRssClient;
         this.openAiIndustryKeywordClient = openAiIndustryKeywordClient;
         this.openAiBusanRewindTrendClient = openAiBusanRewindTrendClient;
+        this.ecosIndustryGrowthClient = ecosIndustryGrowthClient;
     }
 
     public ApiDataResponse<CurrentStatus> currentStatus(String industryCode) {
@@ -619,7 +624,12 @@ public class BusanRewindService {
 
     private List<GrowthPoint> growthSeries(IndustryScope industry) {
         String bokIndustryCode = bokIndustryCode(industry).orElse(industry.sectionCode() + industry.divisionCode());
-        List<GrowthPoint> points = jdbcTemplate.query(
+        List<GrowthPoint> ecosPoints = ecosIndustryGrowthClient.revenueGrowthSeries(
+                industry.divisionCode(), bokIndustryCode, ECOS_GROWTH_HISTORY_START_YEAR, LocalDate.now().getYear());
+        if (ecosPoints.size() >= 2) {
+            return ecosPoints;
+        }
+        return jdbcTemplate.query(
                 """
                 select year, value
                 from industry_benchmark_metric
@@ -630,10 +640,6 @@ public class BusanRewindService {
                 """,
                 (rs, rowNum) -> new GrowthPoint(rs.getInt("year"), round(rs.getDouble("value"))),
                 bokIndustryCode);
-        if (points.size() <= 5) {
-            return points;
-        }
-        return points.subList(points.size() - 5, points.size());
     }
 
     private OpenAiBusanRewindTrendClient.TrendAnalysis trendAnalysis(
@@ -771,7 +777,7 @@ public class BusanRewindService {
         Period matchedPeriod = new Period(bestMatch.startYear(), bestMatch.endYear(), bestMatch.startYear() + "~" + bestMatch.endYear());
         List<IndexPoint> series = indexSeries(values, bestMatch.startYear(), bestMatch.endYear(), current.get(0).year(), current.get(current.size() - 1).year());
         List<PeriodHighlight> highlights = periodHighlights(values, matchedPeriod, current);
-        String flowType = classifyFlow(current);
+        String flowType = classifyFlow(values, current);
         return new SimilarFlow(
                 industry.divisionCode(),
                 matchedPeriod,
@@ -908,22 +914,51 @@ public class BusanRewindService {
         return growthRate(start, end);
     }
 
-    private String classifyFlow(List<YearValue> current) {
-        List<Double> changes = changes(current);
-        long upwardCount = changes.stream().filter(change -> change != null && change > 0).count();
-        if (upwardCount == changes.size()) {
-            double latest = changes.get(changes.size() - 1);
-            double previous = changes.size() >= 2 ? changes.get(changes.size() - 2) : latest;
-            if (latest >= previous * 1.5) {
-                return "최근 급상승";
-            }
-            if (latest < previous) {
-                return "상승세 둔화";
-            }
+    /**
+     * Classifies the flow using the whole available series' past-to-now change rate as the baseline,
+     * rather than just the few most recent points, then checks whether the recent window is
+     * accelerating or decelerating relative to that long-run pace.
+     */
+    private String classifyFlow(List<YearValue> values, List<YearValue> current) {
+        List<Double> allChanges = changes(values).stream().filter(change -> change != null).toList();
+        if (allChanges.isEmpty()) {
+            return "혼합 흐름";
+        }
+        long upCount = allChanges.stream().filter(change -> change > 0).count();
+        long downCount = allChanges.stream().filter(change -> change < 0).count();
+        double upRatio = (double) upCount / allChanges.size();
+        double downRatio = (double) downCount / allChanges.size();
+        if (upRatio < 0.6 && downRatio < 0.6) {
+            return "혼합 흐름";
+        }
+
+        Double overallPace = annualPace(values.get(0), values.get(values.size() - 1));
+        if (downRatio >= 0.6 && (overallPace == null || overallPace <= 0)) {
+            return "하락세";
+        }
+
+        Double recentPace = annualPace(current.get(0), current.get(current.size() - 1));
+        if (overallPace == null || recentPace == null) {
             return "안정적 상승";
         }
-        long downwardCount = changes.stream().filter(change -> change != null && change < 0).count();
-        return downwardCount >= Math.max(1, changes.size() - 1) ? "하락세" : "혼합 흐름";
+        double accelerationThreshold = Math.max(2.0, Math.abs(overallPace) * 0.5);
+        if (recentPace - overallPace >= accelerationThreshold) {
+            return "최근 급상승";
+        }
+        if (overallPace - recentPace >= accelerationThreshold) {
+            return "상승세 둔화";
+        }
+        return "안정적 상승";
+    }
+
+    /** Average per-year percentage pace between two points, e.g. the whole graph's past-to-now change rate. */
+    private Double annualPace(YearValue start, YearValue end) {
+        Double changeRate = growthRate(start.value(), end.value());
+        int years = end.year() - start.year();
+        if (changeRate == null || years <= 0) {
+            return changeRate;
+        }
+        return round(changeRate / years);
     }
 
     private List<IndustryChange> industryChanges(IndustryScope industry, Period period) {
@@ -997,11 +1032,11 @@ public class BusanRewindService {
                             c.company_name,
                             s.support_year,
                             emp_before.employee_count as employee_before,
-                            emp_after.employee_count as employee_after,
+                            coalesce(emp_after_next.employee_count, emp_after_current.employee_count) as employee_after,
                             fin_before.sales_amount as sales_before,
-                            fin_after.sales_amount as sales_after,
+                            coalesce(fin_after_next.sales_amount, fin_after_current.sales_amount) as sales_after,
                             s.main_product as activity_change,
-                            fin_after.research_and_development_expense as rnd_after
+                            coalesce(fin_after_next.research_and_development_expense, fin_after_current.research_and_development_expense) as rnd_after
                         from supported s
                         join company c on c.company_id = s.company_id
                         left join lateral (
@@ -1017,7 +1052,13 @@ public class BusanRewindService {
                             where company_id = s.company_id and year > s.support_year
                             order by year asc
                             limit 1
-                        ) emp_after on true
+                        ) emp_after_next on true
+                        left join lateral (
+                            select employee_count
+                            from company_employment_statistics
+                            where company_id = s.company_id and year = s.support_year
+                            limit 1
+                        ) emp_after_current on true
                         left join lateral (
                             select sales_amount
                             from company_financial_statistics
@@ -1031,7 +1072,13 @@ public class BusanRewindService {
                             where company_id = s.company_id and year > s.support_year
                             order by year asc
                             limit 1
-                        ) fin_after on true
+                        ) fin_after_next on true
+                        left join lateral (
+                            select sales_amount, research_and_development_expense
+                            from company_financial_statistics
+                            where company_id = s.company_id and year = s.support_year
+                            limit 1
+                        ) fin_after_current on true
                         order by c.company_id
                         limit 3
                         """,
