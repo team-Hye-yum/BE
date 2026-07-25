@@ -193,8 +193,7 @@ public class BusanRewindService {
 
     public ApiDataResponse<PastSupportReview> pastSupportReview(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
-        Period period = latestSupportPeriod(industry)
-                .orElseGet(() -> similarFlowValue(industry).matchedPeriod());
+        Period period = similarFlowValue(industry).matchedPeriod();
         List<IndustryChange> industryChanges = period == null ? List.of() : industryChanges(industry, period);
         List<PastSupportProgram> programs = period == null ? List.of() : pastSupportPrograms(industry, period);
         List<SupportedCompanyChange> companyChanges = period == null ? List.of() : supportedCompanyChanges(industry, period);
@@ -209,8 +208,7 @@ public class BusanRewindService {
 
     public ApiDataResponse<SupportComparison> supportComparison(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
-        Period period = latestSupportPeriod(industry)
-                .orElseGet(() -> similarFlowValue(industry).matchedPeriod());
+        Period period = similarFlowValue(industry).matchedPeriod();
         List<String> pastFields = period == null
                 ? List.of()
                 : extractFields(pastSupportPrograms(industry, period).stream()
