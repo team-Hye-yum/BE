@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BusanRewindResponses.AiReviewBriefing;
 import site.dataon.hyeyum.dto.BusanRewindResponses.BusanRelevance;
 import site.dataon.hyeyum.dto.BusanRewindResponses.ChangedField;
 import site.dataon.hyeyum.dto.BusanRewindResponses.ChangeComparison;
@@ -28,6 +29,7 @@ import site.dataon.hyeyum.dto.BusanRewindResponses.DistrictEmployeeGrowth;
 import site.dataon.hyeyum.dto.BusanRewindResponses.EmployeeSizeRatio;
 import site.dataon.hyeyum.dto.BusanRewindResponses.GrowthPoint;
 import site.dataon.hyeyum.dto.BusanRewindResponses.IndexPoint;
+import site.dataon.hyeyum.dto.BusanRewindResponses.IndustryEvidenceNews;
 import site.dataon.hyeyum.dto.BusanRewindResponses.IndustryChange;
 import site.dataon.hyeyum.dto.BusanRewindResponses.PastSupportProgram;
 import site.dataon.hyeyum.dto.BusanRewindResponses.PastSupportReview;
@@ -209,6 +211,52 @@ public class BusanRewindService {
 
     public ApiDataResponse<SupportComparison> supportComparison(String industryCode) {
         IndustryScope industry = findIndustry(industryCode);
+        return new ApiDataResponse<>(supportComparisonValue(industry));
+    }
+
+    public ApiDataResponse<AiReviewBriefing> aiReviewBriefing(String industryCode) {
+        IndustryScope industry = findIndustry(industryCode);
+        CurrentStatus currentStatus = currentStatus(industry.divisionCode()).data();
+        CurrentSupportPrograms currentSupportPrograms = currentSupportPrograms(industry.divisionCode()).data();
+        SimilarFlow similarFlow = similarFlowValue(industry);
+        Period period = similarFlow.matchedPeriod();
+        PastSupportReview pastSupportReview = period == null
+                ? new PastSupportReview(industry.divisionCode(), null, List.of(), "", List.of(), List.of())
+                : new PastSupportReview(
+                        industry.divisionCode(),
+                        period,
+                        industryChanges(industry, period),
+                        period.label() + " 기간의 산업 변화와 지원사업 이력을 함께 검토합니다.",
+                        pastSupportPrograms(industry, period),
+                        supportedCompanyChanges(industry, period));
+        SupportComparison supportComparison = supportComparisonValue(industry);
+        List<IndustryEvidenceNews> evidenceNews = industryEvidenceNews(industry);
+        OpenAiBusanRewindTrendClient.ComprehensiveBriefing aiBriefing =
+                openAiBusanRewindTrendClient.comprehensiveBriefing(
+                        new OpenAiBusanRewindTrendClient.ComprehensiveBriefingRequest(
+                                industry.divisionCode(),
+                                industry.divisionName(),
+                                currentStatusText(currentStatus),
+                                similarFlowText(similarFlow),
+                                pastSupportReviewText(pastSupportReview),
+                                supportComparisonText(supportComparison),
+                                evidenceNews));
+        AiReviewBriefing response = aiBriefing == null
+                ? fallbackAiReviewBriefing(industry, currentStatus, similarFlow, supportComparison, evidenceNews)
+                : new AiReviewBriefing(
+                        industry.divisionCode(),
+                        industry.divisionName(),
+                        "AI 종합 검토 브리핑",
+                        withFallback(aiBriefing.briefingLines(), fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews)),
+                        evidenceNews,
+                        screenText(
+                                aiBriefing.newsSynthesis(),
+                                fallbackNewsSynthesis(industry, currentStatus, evidenceNews)),
+                        "AI_RSS");
+        return new ApiDataResponse<>(response);
+    }
+
+    private SupportComparison supportComparisonValue(IndustryScope industry) {
         Period period = similarFlowValue(industry).matchedPeriod();
         List<String> pastFields = period == null
                 ? List.of()
@@ -217,7 +265,7 @@ public class BusanRewindService {
         List<String> commonFields = currentFields.stream().filter(pastFields::contains).toList();
         List<String> newFields = currentFields.stream().filter(field -> !pastFields.contains(field)).toList();
         List<String> trendKeywords = policyKeywords(industry.divisionName());
-        SupportComparison response = new SupportComparison(
+        return new SupportComparison(
                 industry.divisionCode(),
                 period == null ? null : period.endYear(),
                 commonFields,
@@ -227,7 +275,6 @@ public class BusanRewindService {
                 newFields,
                 trendKeywords,
                 "과거와 현재 지원사업의 분야 키워드를 비교한 참고 요약입니다. 지원사업의 적절성, 우선순위, 성과를 판단하지 않습니다.");
-        return new ApiDataResponse<>(response);
     }
 
     private IndustryScope findIndustry(String rawIndustryCode) {
@@ -670,6 +717,152 @@ public class BusanRewindService {
             values.add(point.year() + ":" + point.growthRate());
         }
         return String.join(", ", values);
+    }
+
+    private List<IndustryEvidenceNews> industryEvidenceNews(IndustryScope industry) {
+        OpenAiIndustryKeywordClient.IndustryNewsKeywords newsKeywords =
+                openAiIndustryKeywordClient.generate(industry.divisionCode(), industry.divisionName());
+        return googleNewsRssClient.searchIndustryEvidenceNews(industry.divisionName(), newsKeywords).stream()
+                .filter(item -> item.link() != null && !item.link().isBlank())
+                .map(item -> new IndustryEvidenceNews(
+                        normalizeNewsDate(item.publishedAt()),
+                        inferIndustryChange(item.title()),
+                        truncate(defaultText(item.title(), "관련 산업 뉴스"), 120),
+                        item.link(),
+                        "Google News RSS"))
+                .limit(6)
+                .toList();
+    }
+
+    private String currentStatusText(CurrentStatus status) {
+        return "기준연도="
+                + status.baseYear()
+                + ", 종사자수="
+                + nullableText(status.employeeCount(), "정보 없음")
+                + ", 종사자 성장률="
+                + nullableText(status.employeeGrowthRate(), "정보 없음")
+                + "%, 법인 비중="
+                + nullableText(status.corporation() == null ? null : status.corporation().ratio(), "정보 없음")
+                + "%, 개인 비중="
+                + nullableText(status.individual() == null ? null : status.individual().ratio(), "정보 없음")
+                + "%";
+    }
+
+    private String similarFlowText(SimilarFlow similarFlow) {
+        Period period = similarFlow.matchedPeriod();
+        return "유사 흐름="
+                + similarFlow.flowType()
+                + ", 매칭 기간="
+                + (period == null ? "정보 없음" : period.label())
+                + ", 요약="
+                + similarFlow.summary();
+    }
+
+    private String pastSupportReviewText(PastSupportReview review) {
+        String changes = review.industryChanges().stream()
+                .map(change -> change.label() + "=" + nullableText(change.changeRate(), "정보 없음") + "%")
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("정보 없음");
+        String programs = review.pastSupportPrograms().stream()
+                .limit(3)
+                .map(program -> "[" + program.year() + "] " + program.title() + "(" + program.supportField() + ")")
+                .reduce((left, right) -> left + " / " + right)
+                .orElse("정보 없음");
+        return "산업 변화=" + changes + "\n과거 지원사업=" + programs;
+    }
+
+    private String supportComparisonText(SupportComparison comparison) {
+        return "과거 분야="
+                + String.join(", ", comparison.pastFields())
+                + "\n현재 분야="
+                + String.join(", ", comparison.currentFields())
+                + "\n새 분야="
+                + String.join(", ", comparison.newFields())
+                + "\n트렌드 키워드="
+                + String.join(", ", comparison.trendKeywords());
+    }
+
+    private AiReviewBriefing fallbackAiReviewBriefing(
+            IndustryScope industry,
+            CurrentStatus currentStatus,
+            SimilarFlow similarFlow,
+            SupportComparison supportComparison,
+            List<IndustryEvidenceNews> evidenceNews) {
+        return new AiReviewBriefing(
+                industry.divisionCode(),
+                industry.divisionName(),
+                "AI 종합 검토 브리핑",
+                fallbackBriefingLines(industry, currentStatus, similarFlow, supportComparison, evidenceNews),
+                evidenceNews,
+                fallbackNewsSynthesis(industry, currentStatus, evidenceNews),
+                "RULE_BASED_RSS");
+    }
+
+    private List<String> fallbackBriefingLines(
+            IndustryScope industry,
+            CurrentStatus currentStatus,
+            SimilarFlow similarFlow,
+            SupportComparison supportComparison,
+            List<IndustryEvidenceNews> evidenceNews) {
+        String firstLink = evidenceNews.isEmpty() ? "" : " [" + evidenceNews.get(0).title() + "](" + evidenceNews.get(0).link() + ")";
+        String secondLink = evidenceNews.size() < 2 ? firstLink : " [" + evidenceNews.get(1).title() + "](" + evidenceNews.get(1).link() + ")";
+        return List.of(
+                industry.divisionName() + "은 현재 산업 통계와 지원사업 키워드를 함께 놓고 검토할 필요가 있습니다." + firstLink,
+                "최근 기준 종사자 성장률은 " + nullableText(currentStatus.employeeGrowthRate(), "확인 제한") + "%로 확인됩니다.",
+                "과거 유사 흐름은 " + similarFlow.flowType() + " 유형으로 분류되며, " + defaultText(similarFlow.summary(), "비교 가능한 시계열이 제한적입니다."),
+                "과거 지원사업은 " + joinLimited(supportComparison.pastFields(), "확인 제한") + " 중심으로 나타납니다.",
+                "현재 지원사업은 " + joinLimited(supportComparison.currentFields(), "확인 제한") + " 항목을 중심으로 재편되어 있습니다.",
+                "새롭게 확인되는 지원 분야는 " + joinLimited(supportComparison.newFields(), "뚜렷하지 않음") + "입니다.",
+                "기업 검토 시에는 개별 매출 변화와 산업 전체 성장 흐름을 함께 비교해야 합니다.",
+                "고용과 생산 역량은 수요 확대 국면에서 실행 가능성을 판단하는 보조 관점으로 활용할 수 있습니다." + secondLink,
+                "본 브리핑은 산업 동향, 과거 지원 이력, RSS 뉴스를 종합한 참고자료이며 지원 여부나 평가 결과를 제시하지 않습니다.");
+    }
+
+    private String fallbackNewsSynthesis(
+            IndustryScope industry, CurrentStatus currentStatus, List<IndustryEvidenceNews> evidenceNews) {
+        if (evidenceNews.isEmpty()) {
+            return industry.divisionName() + " 관련 RSS 뉴스가 제한적이므로, 현재 브리핑은 내부 산업 통계와 지원사업 이력 중심으로 참고해야 합니다.";
+        }
+        return "최근 RSS 기사에서는 "
+                + evidenceNews.stream().limit(3).map(IndustryEvidenceNews::industryChange).distinct().reduce((left, right) -> left + ", " + right).orElse("산업 변화")
+                + " 흐름이 확인됩니다. 종사자 성장률 "
+                + nullableText(currentStatus.employeeGrowthRate(), "확인 제한")
+                + "%와 함께 보면 기업 검토 시 재무지표뿐 아니라 고용, 생산 여건, 기술 전환 역량을 함께 확인할 수 있습니다.";
+    }
+
+    private String inferIndustryChange(String title) {
+        String text = nullToEmpty(title);
+        if (text.contains("친환경") || text.contains("탄소") || text.contains("전기") || text.contains("수소")) {
+            return "친환경 전환 확대";
+        }
+        if (text.contains("AI") || text.contains("인공지능") || text.contains("디지털") || text.contains("스마트")) {
+            return "디지털 전환 확대";
+        }
+        if (text.contains("투자") || text.contains("증설") || text.contains("발주")) {
+            return "투자·수요 확대";
+        }
+        if (text.contains("인력") || text.contains("고용") || text.contains("채용")) {
+            return "인력·고용 여건 변화";
+        }
+        if (text.contains("수출") || text.contains("해외") || text.contains("글로벌")) {
+            return "해외 시장 변화";
+        }
+        return "산업 동향 변화";
+    }
+
+    private String normalizeNewsDate(String publishedAt) {
+        return defaultText(publishedAt, "-");
+    }
+
+    private String nullableText(Object value, String fallback) {
+        return value == null ? fallback : value.toString();
+    }
+
+    private String joinLimited(List<String> values, String fallback) {
+        if (values == null || values.isEmpty()) {
+            return fallback;
+        }
+        return String.join(", ", values.stream().limit(3).toList());
     }
 
     private List<String> fallbackDomesticIssues(Double latestGrowthRate) {

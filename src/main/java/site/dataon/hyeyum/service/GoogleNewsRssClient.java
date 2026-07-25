@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.xml.parsers.DocumentBuilderFactory;
 import okhttp3.OkHttpClient;
@@ -38,6 +40,31 @@ public class GoogleNewsRssClient {
 
     public List<NaverNewsSearchClient.NaverNewsItem> searchOverseasIndustryNews(String industryName) {
         String query = industryName + " (" + String.join(" OR ", OVERSEAS_COUNTRIES) + ") 산업 기술 정책 시장";
+        return search(query);
+    }
+
+    public List<NaverNewsSearchClient.NaverNewsItem> searchIndustryEvidenceNews(String industryName) {
+        return searchIndustryEvidenceNews(industryName, null);
+    }
+
+    public List<NaverNewsSearchClient.NaverNewsItem> searchIndustryEvidenceNews(
+            String industryName, OpenAiIndustryKeywordClient.IndustryNewsKeywords keywords) {
+        List<NaverNewsSearchClient.NaverNewsItem> items = new ArrayList<>();
+        Set<String> seenLinks = new LinkedHashSet<>();
+        for (String query : evidenceQueries(industryName, keywords)) {
+            for (NaverNewsSearchClient.NaverNewsItem item : search(query)) {
+                if (seenLinks.add(item.link())) {
+                    items.add(item);
+                }
+                if (items.size() >= display) {
+                    return items;
+                }
+            }
+        }
+        return items;
+    }
+
+    private List<NaverNewsSearchClient.NaverNewsItem> search(String query) {
         try {
             Request request =
                     new Request.Builder()
@@ -74,6 +101,35 @@ public class GoogleNewsRssClient {
                     text(item, "pubDate")));
         }
         return items;
+    }
+
+    private List<String> evidenceQueries(String industryName, OpenAiIndustryKeywordClient.IndustryNewsKeywords keywords) {
+        Set<String> queries = new LinkedHashSet<>();
+        List<String> primaryKeywords = keywords == null ? List.of() : keywords.primaryKeywords();
+        List<String> trendKeywords = keywords == null ? List.of() : keywords.trendKeywords();
+        List<String> busanKeywords = keywords == null ? List.of() : keywords.busanKeywords();
+        if (primaryKeywords.isEmpty()) {
+            primaryKeywords = List.of(industryName);
+        }
+        for (String keyword : primaryKeywords) {
+            addQuery(queries, keyword + " 산업 동향");
+            addQuery(queries, keyword + " 투자 수요");
+        }
+        for (String trendKeyword : trendKeywords) {
+            addQuery(queries, primaryKeywords.get(0) + " " + trendKeyword);
+        }
+        for (String busanKeyword : busanKeywords) {
+            addQuery(queries, busanKeyword + " 산업");
+        }
+        addQuery(queries, industryName + " 산업 동향 투자 수요 인력 친환경 디지털");
+        return queries.stream().limit(8).toList();
+    }
+
+    private void addQuery(Set<String> queries, String query) {
+        String normalized = query == null ? "" : query.replaceAll("\\s+", " ").trim();
+        if (!normalized.isBlank()) {
+            queries.add(normalized);
+        }
     }
 
     private String text(Element parent, String tagName) {

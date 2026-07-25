@@ -23,6 +23,7 @@ public class SupportProgramElasticsearchService {
 
     private static final Logger log = LoggerFactory.getLogger(SupportProgramElasticsearchService.class);
     private static final IndexCoordinates SUPPORT_PROGRAM_INDEX = IndexCoordinates.of("support-programs");
+    private static final int BULK_INDEX_BATCH_SIZE = 100;
 
     private final ElasticsearchOperations operations;
     private final ElasticsearchClient client;
@@ -119,11 +120,17 @@ public class SupportProgramElasticsearchService {
             return true;
         }
         try {
-            ensureIndex();
-            operations.save(programs.stream()
+            searchable.set(false);
+            recreateIndex();
+            List<SupportProgramSearchDocument> documents = programs.stream()
                     .filter(program -> program.getSupportProgramId() != null)
                     .map(SupportProgramSearchDocument::from)
-                    .toList(), SUPPORT_PROGRAM_INDEX);
+                    .toList();
+            for (int start = 0; start < documents.size(); start += BULK_INDEX_BATCH_SIZE) {
+                int end = Math.min(start + BULK_INDEX_BATCH_SIZE, documents.size());
+                operations.save(documents.subList(start, end), SUPPORT_PROGRAM_INDEX);
+            }
+            operations.indexOps(SupportProgramSearchDocument.class).refresh();
             searchable.set(true);
             return true;
         } catch (RuntimeException exception) {
@@ -138,6 +145,14 @@ public class SupportProgramElasticsearchService {
         if (!indexOperations.exists()) {
             indexOperations.createWithMapping();
         }
+    }
+
+    private void recreateIndex() {
+        IndexOperations indexOperations = operations.indexOps(SupportProgramSearchDocument.class);
+        if (indexOperations.exists()) {
+            indexOperations.delete();
+        }
+        indexOperations.createWithMapping();
     }
 
     private SupportProgramSearchItem mapSearchItem(Map<String, Object> source) {

@@ -115,5 +115,21 @@ public final class BusanRewindResponses {
             List<String> trendKeywords,
             String aiSummary) {}
 
+    public record AiReviewBriefing(
+            String industryCode,
+            String industryName,
+            String title,
+            List<String> briefingLines,
+            List<IndustryEvidenceNews> evidenceNews,
+            String newsSynthesis,
+            String source) {}
+
+    public record IndustryEvidenceNews(
+            String publishedAt,
+            String industryChange,
+            String title,
+            String link,
+            String source) {}
+
     public record ChangedField(String from, String to) {}
 }

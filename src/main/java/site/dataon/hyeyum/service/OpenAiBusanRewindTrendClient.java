@@ -19,6 +19,7 @@ import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import site.dataon.hyeyum.common.error.OpenAiApiException;
+import site.dataon.hyeyum.dto.BusanRewindResponses.IndustryEvidenceNews;
 import site.dataon.hyeyum.dto.BusanRewindResponses.ChangeComparison;
 
 @Component
@@ -80,6 +81,25 @@ public class OpenAiBusanRewindTrendClient {
         }
     }
 
+    public ComprehensiveBriefing comprehensiveBriefing(ComprehensiveBriefingRequest request) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return null;
+        }
+        try {
+            String responseJson = postComprehensiveBriefingApi(request);
+            String outputText = extractOutputText(objectMapper.readTree(responseJson));
+            if (outputText == null || outputText.isBlank()) {
+                return null;
+            }
+            JsonNode result = objectMapper.readTree(outputText);
+            return new ComprehensiveBriefing(
+                    stringList(result.path("briefingLines"), 10),
+                    limited(result.path("newsSynthesis").asText(""), 700));
+        } catch (IOException | RuntimeException exception) {
+            return null;
+        }
+    }
+
     private String postResponsesApi(TrendAnalysisRequest request) throws IOException {
         Map<String, Object> body =
                 Map.of(
@@ -124,6 +144,50 @@ public class OpenAiBusanRewindTrendClient {
         }
     }
 
+    private String postComprehensiveBriefingApi(ComprehensiveBriefingRequest request) throws IOException {
+        Map<String, Object> body =
+                Map.of(
+                        "model",
+                        model,
+                        "instructions",
+                        """
+                        부산 산업·지원사업 검토 담당자를 위한 'AI 종합 검토 브리핑'을 작성하세요.
+                        현재 산업 현황, 과거 유사 사례, 과거/현재 지원사업 변화, RSS 뉴스 근거를 종합해 전문적으로 해석하세요.
+                        briefingLines는 8~10개 문장으로 작성하고, 각 문장은 독립적인 완성 문장이어야 합니다.
+                        뉴스 근거를 사용하는 문장 끝에는 반드시 입력된 RSS 뉴스 링크를 Markdown 형식 [기사](URL)로 1개 이상 붙이세요.
+                        링크가 없는 내용을 단정하지 말고, 통계/지원사업 데이터 기반 참고 관점으로 표현하세요.
+                        지원 여부, 선정 가능성, 평가 결과, 정책 우선순위는 판단하지 마세요.
+                        마지막 문장은 반드시 참고자료 성격과 한계를 설명하세요.
+                        newsSynthesis는 RSS 뉴스가 AI 브리핑의 어떤 근거 역할을 하는지 2~4문장으로 작성하세요.
+                        모든 응답은 한국어 JSON만 반환하세요.
+                        """,
+                        "input",
+                        new Object[] {
+                            Map.of(
+                                    "role",
+                                    "user",
+                                    "content",
+                                    new Object[] {
+                                        Map.of("type", "input_text", "text", comprehensivePrompt(request))
+                                    })
+                        },
+                        "text",
+                        Map.of("format", comprehensiveSchema()));
+        Request httpRequest =
+                new Request.Builder()
+                        .url("https://api.openai.com/v1/responses")
+                        .header("Authorization", "Bearer " + apiKey)
+                        .post(RequestBody.create(objectMapper.writeValueAsString(body), JSON))
+                        .build();
+        try (Response response = httpClient.newCall(httpRequest).execute()) {
+            String responseBody = response.body() == null ? "" : response.body().string();
+            if (!response.isSuccessful()) {
+                throw openAiApiException(response.code(), responseBody);
+            }
+            return responseBody;
+        }
+    }
+
     private String prompt(TrendAnalysisRequest request) {
         StringBuilder builder = new StringBuilder();
         builder.append("industryCode=").append(request.industryCode()).append('\n');
@@ -133,6 +197,27 @@ public class OpenAiBusanRewindTrendClient {
         appendNewsItems(builder, request.domesticNewsItems());
         builder.append("\n[해외 뉴스 - Google News RSS]\n");
         appendNewsItems(builder, request.overseasNewsItems());
+        return builder.toString();
+    }
+
+    private String comprehensivePrompt(ComprehensiveBriefingRequest request) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("industryCode=").append(request.industryCode()).append('\n');
+        builder.append("industryName=").append(request.industryName()).append('\n');
+        builder.append("[현재 산업 현황]\n").append(request.currentStatusText()).append("\n\n");
+        builder.append("[과거 유사 사례]\n").append(request.similarFlowText()).append("\n\n");
+        builder.append("[과거 지원사업 및 지원기업 변화]\n").append(request.pastSupportReviewText()).append("\n\n");
+        builder.append("[과거-현재 지원사업 비교]\n").append(request.supportComparisonText()).append("\n\n");
+        builder.append("[산업 변화 근거 뉴스 - RSS]\n");
+        if (request.evidenceNews().isEmpty()) {
+            builder.append("- 수집 결과 없음\n");
+        }
+        for (IndustryEvidenceNews item : request.evidenceNews()) {
+            builder.append("- 날짜: ").append(item.publishedAt()).append('\n');
+            builder.append("  산업 변화: ").append(item.industryChange()).append('\n');
+            builder.append("  제목: ").append(item.title()).append('\n');
+            builder.append("  링크: ").append(item.link()).append('\n');
+        }
         return builder.toString();
     }
 
@@ -198,6 +283,31 @@ public class OpenAiBusanRewindTrendClient {
                             "policyKeywords",
                             "aiSummary"
                         }));
+    }
+
+    private Map<String, Object> comprehensiveSchema() {
+        Map<String, Object> stringType = Map.of("type", "string");
+        return Map.of(
+                "type",
+                "json_schema",
+                "name",
+                "busan_rewind_ai_review_briefing",
+                "strict",
+                true,
+                "schema",
+                Map.of(
+                        "type",
+                        "object",
+                        "additionalProperties",
+                        false,
+                        "properties",
+                        Map.of(
+                                "briefingLines",
+                                Map.of("type", "array", "items", stringType, "minItems", 8, "maxItems", 10),
+                                "newsSynthesis",
+                                stringType),
+                        "required",
+                        new String[] {"briefingLines", "newsSynthesis"}));
     }
 
     private OpenAiApiException openAiApiException(int statusCode, String responseBody) {
@@ -307,4 +417,15 @@ public class OpenAiBusanRewindTrendClient {
             List<String> strategicIndustries,
             List<String> policyKeywords,
             String aiSummary) {}
+
+    public record ComprehensiveBriefingRequest(
+            String industryCode,
+            String industryName,
+            String currentStatusText,
+            String similarFlowText,
+            String pastSupportReviewText,
+            String supportComparisonText,
+            List<IndustryEvidenceNews> evidenceNews) {}
+
+    public record ComprehensiveBriefing(List<String> briefingLines, String newsSynthesis) {}
 }

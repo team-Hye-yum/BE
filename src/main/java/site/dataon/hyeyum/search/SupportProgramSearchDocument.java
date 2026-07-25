@@ -13,6 +13,8 @@ import site.dataon.hyeyum.domain.BtpSupportProgram;
 @Setting(settingPath = "/elasticsearch/support-program-settings.json")
 public class SupportProgramSearchDocument {
 
+    private static final int SEARCH_SUMMARY_MAX_LENGTH = 300;
+
     @Id
     private String id;
 
@@ -43,7 +45,7 @@ public class SupportProgramSearchDocument {
     @Field(type = FieldType.Keyword)
     private String localGovernmentName;
 
-    @Field(type = FieldType.Text, analyzer = "support_ngram_analyzer", searchAnalyzer = "standard")
+    @Field(type = FieldType.Text)
     private String programSummary;
 
     @Field(type = FieldType.Text, analyzer = "support_ngram_analyzer", searchAnalyzer = "standard")
@@ -78,7 +80,7 @@ public class SupportProgramSearchDocument {
                 program.getSupportType(),
                 program.getDepartmentName(),
                 program.getLocalGovernmentName(),
-                program.getProgramSummary());
+                truncate(program.getProgramSummary(), SEARCH_SUMMARY_MAX_LENGTH));
         document.searchChosung = KoreanSearchText.chosung(document.searchText);
         document.searchJamo = KoreanSearchText.jamo(document.searchText);
         return document;
@@ -118,5 +120,12 @@ public class SupportProgramSearchDocument {
 
     public String getLocalGovernmentName() {
         return localGovernmentName;
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

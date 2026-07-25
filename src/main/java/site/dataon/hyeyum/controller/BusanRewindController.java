@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import site.dataon.hyeyum.dto.ApiDataResponse;
+import site.dataon.hyeyum.dto.BusanRewindResponses.AiReviewBriefing;
 import site.dataon.hyeyum.dto.BusanRewindResponses.CurrentStatus;
 import site.dataon.hyeyum.dto.BusanRewindResponses.CurrentSupportPrograms;
 import site.dataon.hyeyum.dto.BusanRewindResponses.PastSupportReview;
@@ -88,5 +89,15 @@ public class BusanRewindController {
                     @NotBlank
                     String industryCode) {
         return busanRewindService.supportComparison(industryCode);
+    }
+
+    @GetMapping("/ai-review-briefing")
+    @Operation(summary = "Get AI review briefing with RSS evidence")
+    public ApiDataResponse<AiReviewBriefing> aiReviewBriefing(
+            @Parameter(description = "KSIC division code", example = "28")
+                    @RequestParam("industryCode")
+                    @NotBlank
+                    String industryCode) {
+        return busanRewindService.aiReviewBriefing(industryCode);
     }
 }
